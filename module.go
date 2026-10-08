@@ -1,3 +1,5 @@
+// Copyright 2026 Bellus Development Team - All Rights Reserved
+
 package scintilla
 
 import (
