@@ -4,7 +4,6 @@ package scintilla
 
 import (
 	"context"
-	"fmt"
 	"iter"
 	"sync"
 
@@ -53,7 +52,6 @@ func (m *ModuleRegistry) RegisterModule(moduleName string, funcs []*ModuleFuncti
 	defer m.mu.Unlock()
 	builder := m.runtime.NewHostModuleBuilder(moduleName)
 	for _, fn := range funcs {
-		fmt.Println(moduleName, fn.Name)
 		builder.NewFunctionBuilder().
 			WithGoModuleFunction(fn.GoFunc, fn.Params, fn.Results).
 			WithName(fn.Name).
