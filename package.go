@@ -3,8 +3,10 @@
 package scintilla
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 )
@@ -14,6 +16,7 @@ type PackageType string
 
 // PackageConf contains the TOML configuration.
 type PackageConf struct {
+	TargetFile string      `toml:"target_file"`
 	Type       PackageType `toml:"type"`
 	Sources    []string    `toml:"sources"`
 	ObjectsDir string      `toml:"objects_dir"`
@@ -68,5 +71,20 @@ func (p *Package) Exists() bool {
 	if configErr != nil && os.IsNotExist(configErr) {
 		return false
 	}
-	return true 
+	return true
+}
+
+// CreateGitignore adds the .gitignore file to the package directory p.Dir.
+// If .gitignore already exists, it is truncated.
+func (p *Package) CreateGitignore() error {
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s\n", p.Conf.ObjectsDir)
+	b.WriteString("compile_commands.json\n")
+	f, err := os.Create(filepath.Join(p.Dir, ".gitignore"))
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	f.WriteString(b.String())
+	return nil
 }
