@@ -30,7 +30,7 @@ type Script struct {
 	loadedModApi        atomic.Bool
 	isRunningFuncCached atomic.Bool
 
-	registry *ModuleRegistry
+	registry *HostModuleRegistry
 
 	cachedRunningFuncApi api.Function
 	cachedFuncName string
@@ -82,16 +82,16 @@ func (s *Script) Close() error {
 }
 
 // Init initializes the underlying [wazero.Runtime]. Init shall be called
-// before modules are added using [ModuleRegistry].
+// before modules are added using [HostModuleRegistry].
 func (s *Script) Init() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.init()
 }
 
-// SetModuleRegistry sets the provided [ModuleRegistry]. SetModuleRegistry
-// shall be called before modules are added using [ModuleRegistry].
-func (s *Script) SetModuleRegistry(m *ModuleRegistry) {
+// SetModuleRegistry sets the provided [HostModuleRegistry]. SetModuleRegistry
+// shall be called before modules are added using [HostModuleRegistry].
+func (s *Script) SetModuleRegistry(m *HostModuleRegistry) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.registry = m

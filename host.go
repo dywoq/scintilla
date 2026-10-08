@@ -11,24 +11,24 @@ import (
 	"github.com/tetratelabs/wazero/api"
 )
 
-type ModuleFunction struct {
+type HostModuleFunction struct {
 	Name    string
 	GoFunc  api.GoModuleFunc
 	Params  []api.ValueType
 	Results []api.ValueType
 }
 
-// ModuleRegistry is a centralized storage, which registers provided host modules
+// HostModuleRegistry is a centralized storage, which registers provided host modules
 // to [wazero.Runtime]. It is used by [Script] instances. It is thread safe.
-type ModuleRegistry struct {
+type HostModuleRegistry struct {
 	modules []api.Module
 	mu      sync.Mutex
 	runtime wazero.Runtime
 	ctx     context.Context
 }
 
-func NewModuleFunction(name string, goFunc api.GoModuleFunc, params []api.ValueType, results []api.ValueType) *ModuleFunction {
-	return &ModuleFunction{
+func NewHostModuleFunction(name string, goFunc api.GoModuleFunc, params []api.ValueType, results []api.ValueType) *HostModuleFunction {
+	return &HostModuleFunction{
 		Name:    name,
 		GoFunc:  goFunc,
 		Params:  params,
@@ -36,18 +36,18 @@ func NewModuleFunction(name string, goFunc api.GoModuleFunc, params []api.ValueT
 	}
 }
 
-// NewModuleRegistry pre-allocates the underlying modules slice with the capacity as 4.
-func NewModuleRegistry(ctx context.Context) *ModuleRegistry {
-	return &ModuleRegistry{
+// NewHostModuleRegistry pre-allocates the underlying modules slice with the capacity as 4.
+func NewHostModuleRegistry(ctx context.Context) *HostModuleRegistry {
+	return &HostModuleRegistry{
 		ctx:     ctx,
 		modules: make([]api.Module, 0, 4),
 	}
 }
 
-// RegisterModule registers a new module having the provided name (moduleName).
+// RegisterModule registers a new host module having the provided name (moduleName).
 // After a module is added, the registered module cannot be updated and given
 // new functions.
-func (m *ModuleRegistry) RegisterModule(moduleName string, funcs []*ModuleFunction) error {
+func (m *HostModuleRegistry) RegisterModule(moduleName string, funcs []*HostModuleFunction) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	builder := m.runtime.NewHostModuleBuilder(moduleName)
@@ -65,9 +65,9 @@ func (m *ModuleRegistry) RegisterModule(moduleName string, funcs []*ModuleFuncti
 	return nil
 }
 
-// Close invokes the [api.Closer.Close] function of the registered modules.
+// Close invokes the [api.Closer.Close] function of the registered host modules.
 // Returns an error if one of them failed to close.
-func (m *ModuleRegistry) Close() error {
+func (m *HostModuleRegistry) Close() error {
 	for _, mod := range m.modules {
 		if err := mod.Close(m.ctx); err != nil {
 			return err
@@ -77,7 +77,7 @@ func (m *ModuleRegistry) Close() error {
 }
 
 // Iter provides the iterator over the registered modules.
-func (m *ModuleRegistry) Iter() iter.Seq[api.Module] {
+func (m *HostModuleRegistry) Iter() iter.Seq[api.Module] {
 	return func(yield func(api.Module) bool) {
 		for _, m := range m.modules {
 			if !yield(m) {
@@ -87,7 +87,7 @@ func (m *ModuleRegistry) Iter() iter.Seq[api.Module] {
 	}
 }
 
-func (m *ModuleRegistry) SetRuntime(r wazero.Runtime) {
+func (m *HostModuleRegistry) SetRuntime(r wazero.Runtime) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.runtime = r
