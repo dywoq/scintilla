@@ -132,9 +132,15 @@ func (p *Package) Compile() error {
 	return nil
 }
 
+// Link invokes [Package.Compile] and retrieves all object files in the
+// objects directory. Executes `clang++` to link a program. Returns an error if
+// the current config type (p.Conf.Type) is not [PackageTypeProgram].
 func (p *Package) Link() error {
 	if err := p.Compile(); err != nil {
 		return err
+	}
+	if p.Conf.Type != PackageTypeProgram {
+		return fmt.Errorf("cannot link non-program package")
 	}
 	// Since the working directory before cmd.CombinedOutput is not p.Dir, we need to use
 	// p.Dir directory in the glob pattern temporarily. After finding object files, we trim
