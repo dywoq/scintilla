@@ -32,9 +32,9 @@ func Build() *cobra.Command {
 			case scintilla.PackageTypeLib:
 				return p.Archive()
 			case scintilla.PackageTypeProgram:
-				return p.Compile()
+				return p.Link()
 			}
-			return nil
+			return fmt.Errorf("wrong package type: %q", p.Conf.Type)
 		},
 	}
 	return build

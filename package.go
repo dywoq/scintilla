@@ -139,7 +139,6 @@ func (p *Package) Compile() error {
 			objPath,
 			finalSrc,
 		})
-
 		cmd := exec.Command(
 			"clang++",
 			finalArgs...,
@@ -175,13 +174,14 @@ func (p *Package) Link() error {
 	if _, err := os.Lstat(targetFilePath); os.IsExist(err) {
 		os.Remove(targetFilePath)
 	}
-	args := slices.Concat(p.baseCompileArgs(true), []string{
+	args := []string{}
+	for _, lib := range p.Conf.LibraryDirs {
+		args = append(args, fmt.Sprintf("-L%s/", lib))
+	}
+	args = slices.Concat(args, p.Conf.LinkerFlags, p.baseCompileArgs(true), []string{
 		"-Wl,--export-all",
 		"-Wl,--no-entry",
-	}, p.Conf.LinkerFlags, objects, []string{"-o", targetFilePath})
-	for _, lib := range p.Conf.LibraryDirs {
-		args = append(args, fmt.Sprintf("-L%s", lib))
-	}
+	}, objects, []string{"-o", targetFilePath})
 	cmd := exec.Command(
 		"clang++",
 		args...,
@@ -342,7 +342,6 @@ func (p *Package) packLibrary() error {
 			writer.Close()
 			return err
 		}
-
 	}
 
 	return writer.Close()
@@ -459,7 +458,7 @@ func (p *PackageEnv) UnpackDependencies() error {
 	}
 	for _, file := range p.MainPackage.Conf.Dependencies {
 		dest := filepath.Join(p.tmpDependenciesPath(), file)
-		d, err := UnpackPackage(file, dest)
+		d, err := UnpackPackage(filepath.Join(p.MainPackage.Dir, file), dest)
 		if err != nil {
 			return err
 		}
@@ -468,7 +467,7 @@ func (p *PackageEnv) UnpackDependencies() error {
 		}
 		if d.Conf.Type == PackageTypeLib {
 			for _, inc := range d.Conf.IncludeDirs {
-				str, _ := filepath.Rel(dest, inc)
+				str, _ := filepath.Rel(p.MainPackage.Dir, filepath.Join(dest, inc))
 				p.MainPackage.Conf.IncludeDirs = append(p.MainPackage.Conf.IncludeDirs, str)
 			}
 			p.MainPackage.Conf.LibraryDirs = append(p.MainPackage.Conf.LibraryDirs, dest)
