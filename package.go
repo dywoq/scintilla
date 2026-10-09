@@ -201,6 +201,39 @@ func (p *Package) Archive() error {
 	return nil
 }
 
+// GenerateCompilationDatabase is similar to [Package.Compile], but it inserts
+// `bear --` before `clang++` to generate a compilation database that works
+// with clangd.
+func (p *Package) GenerateCompilationDatabase() error {
+	objects := p.objectFiles()
+	if objects == nil {
+		return fmt.Errorf("objects are not found in the %q directory", p.Conf.ObjectsDir)
+	}
+	baseArgs := p.baseCompileArgs()
+	for _, src := range p.Conf.Sources {
+		objFilename, _ := strings.CutSuffix(src, ".cxx")
+		objFilename += ".obj"
+		objPath := filepath.Join(p.Conf.ObjectsDir, objFilename)
+		finalArgs := slices.Concat([]string{"--", "clang++"}, baseArgs, []string{
+			"-c",
+			"-o",
+			objPath,
+			src,
+		})
+		cmd := exec.Command(
+			"bear",
+			finalArgs...,
+		)
+		cmd.Dir = p.Dir
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			fmt.Print(string(output))
+			return err
+		}
+	}
+	return nil
+}
+
 func (p *Package) objectFiles() []string {
 	// Since the working directory before cmd.CombinedOutput is not p.Dir, we need to use
 	// p.Dir directory in the glob pattern temporarily. After finding object files, we trim
