@@ -447,7 +447,8 @@ func (p *Package) baseCompileArgs(addDir bool) []string {
 // UnpackDependencies iterates over the main package's dependencies archive files
 // and unpacks them using [UnpackPackage]. Creates the specified temp directory
 // if it does not exist. If a current unpacking dependency is a library,
-// the function appends its include directories to the main package.
+// the function automatically appends its include directories to the main package,
+// and links against its static library file.
 func (p *PackageEnv) UnpackDependencies() error {
 	if p.MainPackage.Conf == nil {
 		return errors.New("main package config is to be parsed")
@@ -470,6 +471,15 @@ func (p *PackageEnv) UnpackDependencies() error {
 				p.MainPackage.Conf.IncludeDirs = append(p.MainPackage.Conf.IncludeDirs, str)
 			}
 			p.MainPackage.Conf.LibraryDirs = append(p.MainPackage.Conf.LibraryDirs, dest)
+			// Check whether d.Conf.TargetFile is a valid library file, which means
+			// it has the "lib" prefix and ".a" suffix. Later, we cut these off to make it a
+			// linker flag in the main package configuration.
+			if !strings.HasPrefix(d.Conf.TargetFile, "lib") || !strings.HasSuffix(d.Conf.TargetFile, ".a") {
+				return fmt.Errorf("invalid library target filename: must start with \"lib\" and end with \".a\"")
+			}
+			libraryName, _ := strings.CutPrefix(d.Conf.TargetFile, "lib")
+			libraryName, _ = strings.CutSuffix(d.Conf.TargetFile, ".a")
+			d.Conf.LinkerFlags = append(d.Conf.LinkerFlags, fmt.Sprintf("-l%s", libraryName))
 		}
 		p.DependencyPackages = append(p.DependencyPackages, d)
 	}
