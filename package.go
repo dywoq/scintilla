@@ -121,10 +121,9 @@ func (p *Package) CreateGitignore() error {
 // invoke the `clang++` executable (prints its combined output into the
 // console on error).
 func (p *Package) Compile() error {
-	if err := os.Mkdir(p.Conf.ObjectsDir, os.ModeAppend|os.ModePerm); err != nil {
-		if !os.IsExist(err) {
-			return err
-		}
+	if err := os.Mkdir(p.Conf.ObjectsDir, os.ModeAppend|os.ModePerm); os.IsExist(err) {
+		os.RemoveAll(p.Conf.ObjectsDir)
+		os.Mkdir(p.Conf.ObjectsDir, os.ModeAppend|os.ModePerm)
 	}
 	baseArgs := p.baseCompileArgs()
 	for _, src := range p.Conf.Sources {
@@ -228,9 +227,13 @@ func (p *Package) Archive() error {
 // `bear --` before `clang++` to generate a compilation database that works
 // with clangd.
 //
-// Returns an error if invoking `bear` failed (prints its combined output into 
+// Returns an error if invoking `bear` failed (prints its combined output into
 // the console on error).
 func (p *Package) GenerateCompilationDatabase() error {
+	if err := os.Mkdir(p.Conf.ObjectsDir, os.ModeAppend|os.ModePerm); os.IsExist(err) {
+		os.RemoveAll(p.Conf.ObjectsDir)
+		os.Mkdir(p.Conf.ObjectsDir, os.ModeAppend|os.ModePerm)
+	}
 	baseArgs := p.baseCompileArgs()
 	for _, src := range p.Conf.Sources {
 		objFilename, _ := strings.CutSuffix(src, ".cxx")
@@ -450,7 +453,7 @@ func (p *PackageEnv) UnpackDependencies() error {
 		}
 		if d.Conf.Type == PackageTypeLib {
 			for _, inc := range d.Conf.IncludeDirs {
-				str :=  filepath.Join(dest, inc)
+				str := filepath.Join(dest, inc)
 				p.MainPackage.Conf.IncludeDirs = append(p.MainPackage.Conf.IncludeDirs, str)
 			}
 		}
@@ -506,6 +509,7 @@ func UnpackPackage(archivePath string, destFolder string) (*Package, error) {
 			if err != nil {
 				return nil, err
 			}
+			defer r.Close()
 			f, err := os.Create(configFilepath)
 			if err != nil {
 				return nil, err
@@ -527,12 +531,31 @@ func UnpackPackage(archivePath string, destFolder string) (*Package, error) {
 		return nil, fmt.Errorf("config scintilla.toml is not found in %q archive", archivePath)
 	}
 
-	if parsedPackageConf && p.Conf.Type == PackageTypeLib {
+	if p.Conf.Type == PackageTypeLib {
 		for _, file := range zipR.File {
 			if file.FileInfo().IsDir() && slices.Contains(p.Conf.IncludeDirs, file.Name) {
 				if err := unpackPackageDirectory(zipR, file.Name, filepath.Join(destFolder, file.Name)); err != nil {
 					return nil, err
 				}
+			}
+		}
+	}
+
+	for _, file := range zipR.File {
+		if parsedPackageConf && p.Conf.TargetFile == file.Name {
+			targetPath := filepath.Join(destFolder, p.Conf.TargetFile)
+			r, err := file.Open()
+			if err != nil {
+				return nil, err
+			}
+
+			f, err := os.Create(targetPath)
+			if err != nil {
+				return nil, err
+			}
+
+			if _, err := io.Copy(f, r); err != nil {
+				return nil, err
 			}
 		}
 	}
