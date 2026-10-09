@@ -24,6 +24,7 @@ type PackageConf struct {
 	ObjectsDir    string      `toml:"objects_dir"`
 	CompilerFlags []string    `toml:"compiler_flags"`
 	LinkerFlags   []string    `toml:"linker_flags"`
+	IncludeDirs   []string    `toml:"include_dirs"`
 }
 
 type Package struct {
@@ -100,15 +101,18 @@ func (p *Package) CreateGitignore() error {
 // It puts them into the package's objects directory (p.Conf.ObjectsDir),
 // which is created if it does not exist.
 func (p *Package) Compile() error {
+	if err := os.Mkdir(filepath.Join(p.Dir, p.Conf.ObjectsDir), os.ModeAppend|os.ModePerm); err != nil {
+		if !os.IsExist(err) {
+			return err
+		}
+	}
 	baseArgs := slices.Concat([]string{
 		"--target=wasm32-unknown-unknown",
 		"-nostdlib",
 		"-c",
 	}, p.Conf.CompilerFlags)
-	if err := os.Mkdir(filepath.Join(p.Dir, p.Conf.ObjectsDir), os.ModeAppend|os.ModePerm); err != nil {
-		if !os.IsExist(err) {
-			return err
-		}
+	for _, inc := range p.Conf.IncludeDirs {
+		baseArgs = append(baseArgs, fmt.Sprintf("-I%s", inc))
 	}
 	for _, src := range p.Conf.Sources {
 		objFilename, _ := strings.CutSuffix(src, ".cxx")
@@ -119,6 +123,7 @@ func (p *Package) Compile() error {
 			objPath,
 			src,
 		})
+
 		cmd := exec.Command(
 			"clang++",
 			finalArgs...,
@@ -167,6 +172,7 @@ func (p *Package) Link() error {
 		"clang++",
 		args...,
 	)
+
 	cmd.Dir = p.Dir
 	output, err := cmd.CombinedOutput()
 	if err != nil {
