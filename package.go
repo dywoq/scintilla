@@ -171,13 +171,14 @@ func (p *Package) Link() error {
 	if objects == nil {
 		return fmt.Errorf("objects are not found in the %q directory", p.Conf.ObjectsDir)
 	}
-	if _, err := os.Lstat(p.Conf.TargetFile); os.IsExist(err) {
-		os.Remove(p.Conf.TargetFile)
+	targetFilePath := filepath.Join(p.Dir, p.Conf.TargetFile)
+	if _, err := os.Lstat(targetFilePath); os.IsExist(err) {
+		os.Remove(targetFilePath)
 	}
 	args := slices.Concat(p.baseCompileArgs(), []string{
 		"-Wl,--export-all",
 		"-Wl,--no-entry",
-	}, p.Conf.LinkerFlags, objects, []string{"-o", p.Conf.TargetFile})
+	}, p.Conf.LinkerFlags, objects, []string{"-o", targetFilePath})
 	for _, lib := range p.Conf.LibraryDirs {
 		args = append(args, fmt.Sprintf("-L%s", lib))
 	}
@@ -210,12 +211,13 @@ func (p *Package) Archive() error {
 	if objects == nil {
 		return fmt.Errorf("objects are not found in the %q directory", p.Conf.ObjectsDir)
 	}
-	if _, err := os.Lstat(p.Conf.TargetFile); os.IsExist(err) {
-		os.Remove(p.Conf.TargetFile)
+	targetFilePath := filepath.Join(p.Dir, p.Conf.TargetFile)
+	if _, err := os.Lstat(targetFilePath); os.IsExist(err) {
+		os.Remove(targetFilePath)
 	}
 	args := slices.Concat([]string{
 		"rcs",
-		p.Conf.TargetFile,
+		targetFilePath,
 	}, objects)
 	cmd := exec.Command(
 		"llvm-ar",
@@ -296,7 +298,7 @@ func (p *Package) packProgram() error {
 	defer f.Close()
 
 	writer := zip.NewWriter(f)
-	if err := p.packFile(writer, p.Conf.TargetFile, p.Conf.TargetFile); err != nil {
+	if err := p.packFile(writer, filepath.Join(p.Dir, p.Conf.TargetFile), p.Conf.TargetFile); err != nil {
 		writer.Close()
 		return err
 	}
@@ -324,7 +326,7 @@ func (p *Package) packLibrary() error {
 	defer f.Close()
 
 	writer := zip.NewWriter(f)
-	if err := p.packFile(writer, p.Conf.TargetFile, p.Conf.TargetFile); err != nil {
+	if err := p.packFile(writer, filepath.Join(p.Dir, p.Conf.TargetFile), p.Conf.TargetFile); err != nil {
 		writer.Close()
 		return err
 	}
@@ -335,7 +337,7 @@ func (p *Package) packLibrary() error {
 	}
 
 	for _, inc := range p.Conf.IncludeDirs {
-		if err := p.packDirectory(writer, inc); err != nil {
+		if err := p.packDirectory(writer, filepath.Join(p.Dir, inc)); err != nil {
 			writer.Close()
 			return err
 		}

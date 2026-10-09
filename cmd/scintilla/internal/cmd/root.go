@@ -18,6 +18,6 @@ func Root() *cobra.Command {
 		Short: "Scripting infrastructure, based on WebAssembly and C++",
 		Long:  long.String(),
 	}
-	root.AddCommand(Build())
+	root.AddCommand(Build(), Pack())
 	return root
 }
