@@ -42,7 +42,6 @@ type Package struct {
 type PackageEnv struct {
 	MainPackage        *Package
 	DependencyPackages []*Package
-	TempDir            string
 }
 
 func NewPackage(dir string) *Package {
@@ -53,7 +52,6 @@ func NewPackageEnv(mainPackageDir string, tempDir string) *PackageEnv {
 	return &PackageEnv{
 		MainPackage:        NewPackage(mainPackageDir),
 		DependencyPackages: []*Package{},
-		TempDir:            tempDir,
 	}
 }
 
@@ -105,6 +103,7 @@ func (p *Package) CreateGitignore() error {
 	b.WriteString("compile_commands.json\n")
 	b.WriteString(p.Conf.TargetFile)
 	b.WriteRune('\n')
+	b.WriteString(".scintilla")
 	f, err := os.Create(filepath.Join(p.Dir, ".gitignore"))
 	if err != nil {
 		return err
@@ -480,8 +479,8 @@ func (p *PackageEnv) UnpackDependencies() error {
 func (p *PackageEnv) createTmpDir() error {
 	// This function is supposed to create temporary directory and its entries
 	// if it does not exist
-	if _, err := os.Lstat(p.TempDir); os.IsNotExist(err) {
-		if err := os.Mkdir(p.TempDir, os.ModeAppend|os.ModePerm); err != nil {
+	if _, err := os.Lstat(p.tmpPath()); os.IsNotExist(err) {
+		if err := os.Mkdir(p.tmpPath(), os.ModeAppend|os.ModePerm); err != nil {
 			return err
 		}
 		if err := os.Mkdir(p.tmpDependenciesPath(), os.ModeAppend|os.ModePerm); err != nil {
@@ -491,8 +490,12 @@ func (p *PackageEnv) createTmpDir() error {
 	return nil
 }
 
+func (p *PackageEnv) tmpPath() string {
+	return filepath.Join(p.MainPackage.Dir, ".scintilla")
+}
+
 func (p *PackageEnv) tmpDependenciesPath() string {
-	return filepath.Join(p.TempDir, "dependencies")
+	return filepath.Join(p.tmpPath(), "dependencies")
 }
 
 // UnpackPackage opens the ZIP archive file at archivePath and writes its contents to destFolder.

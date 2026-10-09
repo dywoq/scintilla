@@ -84,7 +84,7 @@ func initProgram(packageName string, conf *scintilla.PackageConf) error {
 	}
 	io.WriteString(mainFile, mainContent.String())
 	mainFile.Close()
-	return nil
+	return p.CreateGitignore()
 }
 
 func initLibrary(packageName string, conf *scintilla.PackageConf) error {
@@ -101,5 +101,5 @@ func initLibrary(packageName string, conf *scintilla.PackageConf) error {
 	}
 	io.WriteString(fooFile, fooContent.String())
 	fooFile.Close()
-	return nil
+	return p.CreateGitignore()
 }
