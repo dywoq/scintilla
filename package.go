@@ -3,7 +3,10 @@
 package scintilla
 
 import (
+	"archive/zip"
 	"fmt"
+	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -246,6 +249,163 @@ func (p *Package) GenerateCompilationDatabase() error {
 		}
 	}
 	return nil
+}
+
+// Pack retrieves the configuration type. If it is [PackageTypeProgram],
+// it compiles and links the program before turning it into archive, which has
+// scintilla.toml. If it is [PackageTypeLib], Pack compiles object files,
+// calls [Package.Archive] and writes all include directories to the archive
+// in the original layout.
+func (p *Package) Pack() error {
+	switch p.Conf.Type {
+	case PackageTypeProgram:
+		return p.packProgram()
+	case PackageTypeLib:
+		return p.packLibrary()
+	}
+	return fmt.Errorf("unknown package type %q", p.Conf.Type)
+}
+
+func (p *Package) packProgram() error {
+	if err := p.Compile(); err != nil {
+		return err
+	}
+	if err := p.Link(); err != nil {
+		return err
+	}
+
+	f, err := os.Create(fmt.Sprintf("%s.zip", p.Dir))
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	writer := zip.NewWriter(f)
+	if err := p.packFile(writer, filepath.Join(p.Dir, p.Conf.TargetFile), p.Conf.TargetFile); err != nil {
+		writer.Close()
+		return err
+	}
+
+	if err := p.packFile(writer, filepath.Join(p.Dir, "scintilla.toml"), "scintilla.toml"); err != nil {
+		writer.Close()
+		return err
+	}
+
+	return writer.Close()
+}
+
+func (p *Package) packLibrary() error {
+	if err := p.Compile(); err != nil {
+		return err
+	}
+	if err := p.Archive(); err != nil {
+		return err
+	}
+
+	f, err := os.Create(fmt.Sprintf("%s.zip", p.Dir))
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	writer := zip.NewWriter(f)
+	if err := p.packFile(writer, filepath.Join(p.Dir, p.Conf.TargetFile), p.Conf.TargetFile); err != nil {
+		writer.Close()
+		return err
+	}
+
+	if err := p.packFile(writer, filepath.Join(p.Dir, "scintilla.toml"), "scintilla.toml"); err != nil {
+		writer.Close()
+		return err
+	}
+
+	for _, inc := range p.Conf.IncludeDirs {
+		if err := p.packDirectory(writer, filepath.Join(p.Dir, inc)); err != nil {
+			writer.Close()
+			return err
+		}
+
+	}
+
+	return writer.Close()
+}
+
+func (p *Package) packFile(writer *zip.Writer, physicalFilepath string, zipFilepath string) error {
+	w, err := writer.Create(zipFilepath)
+	if err != nil {
+		return err
+	}
+
+	targetFile, err := os.Open(physicalFilepath)
+	if err != nil {
+		return err
+	}
+	defer targetFile.Close()
+
+	if _, err := io.Copy(w, targetFile); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (p *Package) packDirectory(writer *zip.Writer, sourceDir string) error {
+	sourceDir = filepath.Clean(sourceDir)
+	parentDir := filepath.Dir(sourceDir)
+	return filepath.WalkDir(sourceDir, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		relPath, err := filepath.Rel(parentDir, path)
+		if err != nil {
+			return err
+		}
+
+		zipPath := filepath.ToSlash(relPath)
+
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+
+		header, err := zip.FileInfoHeader(info)
+		if err != nil {
+			return err
+		}
+
+		header.Name = zipPath
+
+		if entry.IsDir() {
+			header.Name += "/"
+			_, err := writer.CreateHeader(header)
+			return err
+		}
+
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("unsupported file type: %s", path)
+		}
+
+		header.Method = zip.Deflate
+
+		w, err := writer.CreateHeader(header)
+		if err != nil {
+			return err
+		}
+
+		file, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+
+		_, copyErr := io.Copy(w, file)
+		closeErr := file.Close()
+
+		if copyErr != nil {
+			return copyErr
+		}
+		return closeErr
+	})
 }
 
 func (p *Package) objectFiles() []string {
