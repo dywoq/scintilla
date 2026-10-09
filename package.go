@@ -4,6 +4,7 @@ package scintilla
 
 import (
 	"archive/zip"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -37,8 +38,22 @@ type Package struct {
 	ConfMetadata toml.MetaData
 }
 
+type PackageEnv struct {
+	MainPackage        *Package
+	DependencyPackages []*Package
+	TempDir            string
+}
+
 func NewPackage(dir string) *Package {
 	return &Package{Conf: new(PackageConf), Dir: dir}
+}
+
+func NewPackageEnv(mainPackageDir string, tempDir string) *PackageEnv {
+	return &PackageEnv{
+		MainPackage:        NewPackage(mainPackageDir),
+		DependencyPackages: []*Package{},
+		TempDir:            tempDir,
+	}
 }
 
 const (
@@ -432,6 +447,55 @@ func (p *Package) baseCompileArgs() []string {
 		baseArgs = append(baseArgs, fmt.Sprintf("-I%s", inc))
 	}
 	return baseArgs
+}
+
+// UnpackDependencies iterates over the main package's dependencies archive files
+// and unpacks them using [UnpackPackage]. Creates the specified temp directory
+// if it does not exist. If a current unpacking dependency is a library,
+// the function appends its include directories to the main package.
+func (p *PackageEnv) UnpackDependencies() error {
+	if p.MainPackage.Conf == nil {
+		return errors.New("main package config is to be parsed")
+	}
+	if err := p.createTmpDir(); err != nil {
+		return err
+	}
+	for _, file := range p.MainPackage.Conf.Dependencies {
+		dest := filepath.Join(p.tmpDependenciesPath(), file)
+		d, err := UnpackPackage(filepath.Join(p.MainPackage.Dir, file), dest)
+		if err != nil {
+			return err
+		}
+		if err := d.ParseConfig(); err != nil {
+			return err
+		}
+		if d.Conf.Type == PackageTypeLib {
+			for _, inc := range d.Conf.IncludeDirs {
+				str, _ := filepath.Rel(p.MainPackage.Dir, filepath.Join(dest, inc))
+				p.MainPackage.Conf.IncludeDirs = append(p.MainPackage.Conf.IncludeDirs, str)
+			}
+		}
+		p.DependencyPackages = append(p.DependencyPackages, d)
+	}
+	return nil
+}
+
+func (p *PackageEnv) createTmpDir() error {
+	// This function is supposed to create temporary directory and its entries
+	// if it does not exist
+	if _, err := os.Lstat(p.TempDir); os.IsNotExist(err) {
+		if err := os.Mkdir(p.TempDir, os.ModeAppend|os.ModePerm); err != nil {
+			return err
+		}
+		if err := os.Mkdir(p.tmpDependenciesPath(), os.ModeAppend|os.ModePerm); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (p *PackageEnv) tmpDependenciesPath() string {
+	return filepath.Join(p.TempDir, "dependencies")
 }
 
 // UnpackPackage opens the ZIP archive file at archivePath and writes its contents to destFolder.
