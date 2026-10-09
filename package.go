@@ -106,19 +106,13 @@ func (p *Package) Compile() error {
 			return err
 		}
 	}
-	baseArgs := slices.Concat([]string{
-		"--target=wasm32-unknown-unknown",
-		"-nostdlib",
-		"-c",
-	}, p.Conf.CompilerFlags)
-	for _, inc := range p.Conf.IncludeDirs {
-		baseArgs = append(baseArgs, fmt.Sprintf("-I%s", inc))
-	}
+	baseArgs := p.baseCompileArgs()
 	for _, src := range p.Conf.Sources {
 		objFilename, _ := strings.CutSuffix(src, ".cxx")
 		objFilename += ".obj"
 		objPath := filepath.Join(p.Conf.ObjectsDir, objFilename)
 		finalArgs := slices.Concat(baseArgs, []string{
+			"-c",
 			"-o",
 			objPath,
 			src,
@@ -162,9 +156,7 @@ func (p *Package) Link() error {
 	if _, err := os.Lstat(p.Conf.TargetFile); os.IsExist(err) {
 		os.Remove(p.Conf.TargetFile)
 	}
-	args := slices.Concat([]string{
-		"--target=wasm32-unknown-unknown",
-		"-nostdlib",
+	args := slices.Concat(p.baseCompileArgs(), []string{
 		"-Wl,--export-all",
 		"-Wl,--no-entry",
 	}, p.Conf.LinkerFlags, objects, []string{"-o", p.Conf.TargetFile})
@@ -172,7 +164,6 @@ func (p *Package) Link() error {
 		"clang++",
 		args...,
 	)
-
 	cmd.Dir = p.Dir
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -223,4 +214,15 @@ func (p *Package) Archive() error {
 func (p *Package) objectFiles() []string {
 	objects, _ := filepath.Glob(filepath.Join(p.Dir, p.Conf.ObjectsDir, "*.obj"))
 	return objects
+}
+
+func (p *Package) baseCompileArgs() []string {
+	baseArgs := slices.Concat([]string{
+		"--target=wasm32-unknown-unknown",
+		"-nostdlib",
+	}, p.Conf.CompilerFlags)
+	for _, inc := range p.Conf.IncludeDirs {
+		baseArgs = append(baseArgs, fmt.Sprintf("-I%s", inc))
+	}
+	return baseArgs
 }
