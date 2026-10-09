@@ -33,7 +33,7 @@ type Script struct {
 	registry *HostModuleRegistry
 
 	cachedRunningFuncApi api.Function
-	cachedFuncName string
+	cachedFuncName       string
 }
 
 var (
@@ -109,15 +109,21 @@ func (s *Script) close() error {
 	if !s.initialized.Load() {
 		return nil
 	}
-	err := s.apiMod.Close(s.ctx)
-	if err != nil {
-		return err
+
+	if s.apiMod != nil {
+		err := s.apiMod.Close(s.ctx)
+		if err != nil {
+			return err
+		}
 	}
 
-	err = s.runtime.Close(s.ctx)
-	if err != nil {
-		return err
+	if s.runtime != nil {
+		err := s.runtime.Close(s.ctx)
+		if err != nil {
+			return err
+		}
 	}
+
 	return nil
 }
 
