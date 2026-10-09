@@ -80,6 +80,9 @@ func (p *Package) Exists() bool {
 
 // CreateGitignore adds the .gitignore file to the package directory p.Dir.
 // If .gitignore already exists, it is truncated.
+//
+// Returns an error if it failed to create a .gitignore file in the
+// package directory.
 func (p *Package) CreateGitignore() error {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s\n", p.Conf.ObjectsDir)
@@ -96,10 +99,12 @@ func (p *Package) CreateGitignore() error {
 }
 
 // Compile invokes the clang++ executable and compiles the source files,
-// specified in [PackageConf].
+// specified in [PackageConf]. It puts them into the package's objects
+// directory (p.Conf.ObjectsDir), which is created if it does not exist.
 //
-// It puts them into the package's objects directory (p.Conf.ObjectsDir),
-// which is created if it does not exist.
+// Returns an error if it failed to create an objects directory or
+// invoke the `clang++` executable (prints its combined output into the
+// console on error).
 func (p *Package) Compile() error {
 	if err := os.Mkdir(filepath.Join(p.Dir, p.Conf.ObjectsDir), os.ModeAppend|os.ModePerm); err != nil {
 		if !os.IsExist(err) {
@@ -133,8 +138,11 @@ func (p *Package) Compile() error {
 }
 
 // Link invokes [Package.Compile] and retrieves all object files in the
-// objects directory. Executes `clang++` to link a program. Returns an error if
-// the current config type (p.Conf.Type) is not [PackageTypeProgram].
+// objects directory. Executes `clang++` to link a program.
+//
+// Returns an error if the current config type (p.Conf.Type) is not
+// [PackageTypeProgram], object files are not found or invoking `clang++`
+// failed (prints its combined output into the console on error).
 func (p *Package) Link() error {
 	if err := p.Compile(); err != nil {
 		return err
@@ -168,8 +176,11 @@ func (p *Package) Link() error {
 }
 
 // Archive invokes [Package.Compile] and retrieves all object files in the
-// objects directory. Executes `llvm-ar` to link a program. Returns an error if
-// the current config type (p.Conf.Type) is not [PackageTypeProgram]
+// objects directory. Executes `llvm-ar` to link a program.
+//
+// Returns an error if the current config type (p.Conf.Type) is not
+// [PackageTypeLib], object files are not found or invoking `llvm-ar`
+// failed (prints its combined output into the console on error).
 func (p *Package) Archive() error {
 	if err := p.Compile(); err != nil {
 		return err
@@ -204,6 +215,9 @@ func (p *Package) Archive() error {
 // GenerateCompilationDatabase is similar to [Package.Compile], but it inserts
 // `bear --` before `clang++` to generate a compilation database that works
 // with clangd.
+//
+// Returns an error if  object files are not found or invoking `bear`
+// failed (prints its combined output into the console on error).
 func (p *Package) GenerateCompilationDatabase() error {
 	objects := p.objectFiles()
 	if objects == nil {
