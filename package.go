@@ -127,7 +127,7 @@ func (p *Package) Compile() error {
 		os.RemoveAll(objsDirPath)
 		os.Mkdir(objsDirPath, os.ModeAppend|os.ModePerm)
 	}
-	baseArgs := p.baseCompileArgs()
+	baseArgs := p.baseCompileArgs(true)
 	for _, src := range p.Conf.Sources {
 		finalSrc := filepath.Join(p.Dir, src)
 		objFilename, _ := strings.CutSuffix(src, ".cxx")
@@ -175,7 +175,7 @@ func (p *Package) Link() error {
 	if _, err := os.Lstat(targetFilePath); os.IsExist(err) {
 		os.Remove(targetFilePath)
 	}
-	args := slices.Concat(p.baseCompileArgs(), []string{
+	args := slices.Concat(p.baseCompileArgs(true), []string{
 		"-Wl,--export-all",
 		"-Wl,--no-entry",
 	}, p.Conf.LinkerFlags, objects, []string{"-o", targetFilePath})
@@ -243,9 +243,9 @@ func (p *Package) GenerateCompilationDatabase() error {
 		os.RemoveAll(objsDirPath)
 		os.Mkdir(objsDirPath, os.ModeAppend|os.ModePerm)
 	}
-	baseArgs := p.baseCompileArgs()
+	baseArgs := p.baseCompileArgs(false)
 	for _, src := range p.Conf.Sources {
-		finalSrc := filepath.Join(p.Dir, src)
+		finalSrc := filepath.Join(src)
 		objFilename, _ := strings.CutSuffix(src, ".cxx")
 		objFilename += ".obj"
 		objPath := filepath.Join(p.Conf.ObjectsDir, objFilename)
@@ -259,6 +259,7 @@ func (p *Package) GenerateCompilationDatabase() error {
 			"bear",
 			finalArgs...,
 		)
+		cmd.Dir = p.Dir
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			fmt.Print(string(output))
@@ -430,13 +431,17 @@ func (p *Package) objectFiles() []string {
 	return objects
 }
 
-func (p *Package) baseCompileArgs() []string {
+func (p *Package) baseCompileArgs(addDir bool) []string {
 	baseArgs := slices.Concat([]string{
 		"--target=wasm32-unknown-unknown",
 		"-nostdlib",
 	}, p.Conf.CompilerFlags)
 	for _, inc := range p.Conf.IncludeDirs {
-		baseArgs = append(baseArgs, fmt.Sprintf("-I%s", inc))
+		finalInc := inc
+		if addDir {
+			finalInc = filepath.Join(p.Dir, inc)
+		}
+		baseArgs = append(baseArgs, fmt.Sprintf("-I%s", finalInc))
 	}
 	return baseArgs
 }

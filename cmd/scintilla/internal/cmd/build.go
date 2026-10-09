@@ -4,6 +4,7 @@ package cmd
 
 import (
 	"fmt"
+	"path/filepath"
 
 	"github.com/bellus-team/scintilla"
 	"github.com/spf13/cobra"
@@ -18,6 +19,11 @@ func Build() *cobra.Command {
 			p := scintilla.NewPackage(args[0])
 			if err := p.ParseConfig(); err != nil {
 				return fmt.Errorf("parsing config failed: %v", err)
+			}
+			env := scintilla.NewPackageEnv(p.Dir, filepath.Join(p.Dir, ".scintilla"))
+			env.MainPackage = p
+			if err := env.UnpackDependencies(); err != nil {
+				return fmt.Errorf("unpacking dependencies failed: %v", err)
 			}
 			if err := p.Compile(); err != nil {
 				return fmt.Errorf("compilation of the package failed: %v", err)
