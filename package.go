@@ -142,16 +142,10 @@ func (p *Package) Link() error {
 	if p.Conf.Type != PackageTypeProgram {
 		return fmt.Errorf("cannot link non-program package")
 	}
-	// Since the working directory before cmd.CombinedOutput is not p.Dir, we need to use
-	// p.Dir directory in the glob pattern temporarily. After finding object files, we trim
-	// the prefix.
+
 	objects := p.objectFiles()
 	if objects == nil {
 		return fmt.Errorf("objects are not found in the %q directory", p.Conf.ObjectsDir)
-	}
-	for idx, obj := range objects {
-		before, _ := strings.CutPrefix(obj, p.Dir+"/")
-		objects[idx] = before
 	}
 	if _, err := os.Lstat(p.Conf.TargetFile); os.IsExist(err) {
 		os.Remove(p.Conf.TargetFile)
@@ -187,10 +181,6 @@ func (p *Package) Archive() error {
 	if objects == nil {
 		return fmt.Errorf("objects are not found in the %q directory", p.Conf.ObjectsDir)
 	}
-	for idx, obj := range objects {
-		before, _ := strings.CutPrefix(obj, p.Dir+"/")
-		objects[idx] = before
-	}
 	if _, err := os.Lstat(p.Conf.TargetFile); os.IsExist(err) {
 		os.Remove(p.Conf.TargetFile)
 	}
@@ -212,7 +202,16 @@ func (p *Package) Archive() error {
 }
 
 func (p *Package) objectFiles() []string {
+	// Since the working directory before cmd.CombinedOutput is not p.Dir, we need to use
+	// p.Dir directory in the glob pattern temporarily. After finding object files, we trim
+	// the prefix.
 	objects, _ := filepath.Glob(filepath.Join(p.Dir, p.Conf.ObjectsDir, "*.obj"))
+	if objects != nil {
+		for idx, obj := range objects {
+			before, _ := strings.CutPrefix(obj, p.Dir+"/")
+			objects[idx] = before
+		}
+	}
 	return objects
 }
 
