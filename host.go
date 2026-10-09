@@ -69,6 +69,9 @@ func (m *HostModuleRegistry) RegisterModule(moduleName string, funcs []*HostModu
 // Returns an error if one of them failed to close.
 func (m *HostModuleRegistry) Close() error {
 	for _, mod := range m.modules {
+		if mod == nil {
+			continue
+		}
 		if err := mod.Close(m.ctx); err != nil {
 			return err
 		}
