@@ -111,7 +111,8 @@ func (p *Package) Compile() error {
 		}
 	}
 	for _, src := range p.Conf.Sources {
-		objFilename := strings.TrimRight(src, ".cxx") + ".obj"
+		objFilename, _ := strings.CutSuffix(src, ".cxx")
+		objFilename += ".obj"
 		objPath := filepath.Join(p.Conf.ObjectsDir, objFilename)
 		finalArgs := slices.Concat(baseArgs, []string{
 			"-o",
@@ -145,12 +146,16 @@ func (p *Package) Link() error {
 	// Since the working directory before cmd.CombinedOutput is not p.Dir, we need to use
 	// p.Dir directory in the glob pattern temporarily. After finding object files, we trim
 	// the prefix.
-	objects, _ := filepath.Glob(filepath.Join(p.Dir, p.Conf.ObjectsDir, "*.obj"))
+	objects := p.objectFiles()
 	if objects == nil {
 		return fmt.Errorf("objects are not found in the %q directory", p.Conf.ObjectsDir)
 	}
 	for idx, obj := range objects {
-		objects[idx] = strings.TrimLeft(obj, p.Dir+"/")
+		before, _ := strings.CutPrefix(obj, p.Dir+"/")
+		objects[idx] = before
+	}
+	if _, err := os.Lstat(p.Conf.TargetFile); os.IsExist(err) {
+		os.Remove(p.Conf.TargetFile)
 	}
 	args := slices.Concat([]string{
 		"--target=wasm32-unknown-unknown",
@@ -169,4 +174,47 @@ func (p *Package) Link() error {
 		return err
 	}
 	return nil
+}
+
+// Archive invokes [Package.Compile] and retrieves all object files in the
+// objects directory. Executes `llvm-ar` to link a program. Returns an error if
+// the current config type (p.Conf.Type) is not [PackageTypeProgram]
+func (p *Package) Archive() error {
+	if err := p.Compile(); err != nil {
+		return err
+	}
+	if p.Conf.Type != PackageTypeLib {
+		return fmt.Errorf("cannot archive non-library package")
+	}
+	objects := p.objectFiles()
+	if objects == nil {
+		return fmt.Errorf("objects are not found in the %q directory", p.Conf.ObjectsDir)
+	}
+	for idx, obj := range objects {
+		before, _ := strings.CutPrefix(obj, p.Dir+"/")
+		objects[idx] = before
+	}
+	if _, err := os.Lstat(p.Conf.TargetFile); os.IsExist(err) {
+		os.Remove(p.Conf.TargetFile)
+	}
+	args := slices.Concat([]string{
+		"rcs",
+		p.Conf.TargetFile,
+	}, objects)
+	cmd := exec.Command(
+		"llvm-ar",
+		args...,
+	)
+	cmd.Dir = p.Dir
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		fmt.Print(string(output))
+		return err
+	}
+	return nil
+}
+
+func (p *Package) objectFiles() []string {
+	objects, _ := filepath.Glob(filepath.Join(p.Dir, p.Conf.ObjectsDir, "*.obj"))
+	return objects
 }
