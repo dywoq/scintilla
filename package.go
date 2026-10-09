@@ -29,6 +29,7 @@ type PackageConf struct {
 	CompilerFlags []string    `toml:"compiler_flags"`
 	LinkerFlags   []string    `toml:"linker_flags"`
 	IncludeDirs   []string    `toml:"include_dirs"`
+	LibraryDirs   []string    `toml:"library_dirs"`
 	Dependencies  []string    `toml:"dependencies"`
 }
 
@@ -175,6 +176,9 @@ func (p *Package) Link() error {
 		"-Wl,--export-all",
 		"-Wl,--no-entry",
 	}, p.Conf.LinkerFlags, objects, []string{"-o", p.Conf.TargetFile})
+	for _, lib := range p.Conf.LibraryDirs {
+		args = append(args, fmt.Sprintf("-L%s", lib))
+	}
 	cmd := exec.Command(
 		"clang++",
 		args...,
@@ -456,6 +460,7 @@ func (p *PackageEnv) UnpackDependencies() error {
 				str := filepath.Join(dest, inc)
 				p.MainPackage.Conf.IncludeDirs = append(p.MainPackage.Conf.IncludeDirs, str)
 			}
+			p.MainPackage.Conf.LibraryDirs = append(p.MainPackage.Conf.LibraryDirs, dest)
 		}
 		p.DependencyPackages = append(p.DependencyPackages, d)
 	}
