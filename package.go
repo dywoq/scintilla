@@ -28,6 +28,7 @@ type PackageConf struct {
 	CompilerFlags []string    `toml:"compiler_flags"`
 	LinkerFlags   []string    `toml:"linker_flags"`
 	IncludeDirs   []string    `toml:"include_dirs"`
+	Dependencies  []string    `toml:"dependencies"`
 }
 
 type Package struct {
@@ -431,4 +432,148 @@ func (p *Package) baseCompileArgs() []string {
 		baseArgs = append(baseArgs, fmt.Sprintf("-I%s", inc))
 	}
 	return baseArgs
+}
+
+// UnpackPackage opens the ZIP archive file at archivePath and writes its contents to destFolder.
+// If destFolder does not exist, it is created in the process's working directory. UnpackPackage
+// parses scintilla.toml, which is at the root of the archive file. If it is a library,
+// UnpackPackage unpacks include directories in the original tree layout.
+//
+// Returns an error if UnpackPackage failed to create destination folder, open and parse
+// scintilla.toml and copy include directories to the destFolder.
+func UnpackPackage(archivePath string, destFolder string) (*Package, error) {
+	zipR, err := zip.OpenReader(archivePath)
+	if err != nil {
+		return nil, err
+	}
+	defer zipR.Close()
+
+	if _, err := os.Lstat(destFolder); os.IsNotExist(err) {
+		if err := os.Mkdir(destFolder, os.ModePerm|os.ModeAppend); err != nil {
+			return nil, err
+		}
+	}
+
+	var p *Package
+	parsedPackageConf := false
+	for _, file := range zipR.File {
+		if file.Name == "scintilla.toml" {
+			configFilepath := filepath.Join(destFolder, "scintilla.toml")
+			r, err := file.Open()
+			if err != nil {
+				return nil, err
+			}
+			f, err := os.Create(configFilepath)
+			if err != nil {
+				return nil, err
+			}
+			defer f.Close()
+			if _, err := io.Copy(f, r); err != nil {
+				return nil, err
+			}
+
+			p = NewPackage(destFolder)
+			if err := p.ParseConfig(); err != nil {
+				return nil, err
+			}
+			parsedPackageConf = true
+			continue
+		}
+	}
+	if !parsedPackageConf {
+		return nil, fmt.Errorf("config scintilla.toml is not found in %q archive", archivePath)
+	}
+
+	if parsedPackageConf && p.Conf.Type == PackageTypeLib {
+		for _, file := range zipR.File {
+			if file.FileInfo().IsDir() && slices.Contains(p.Conf.IncludeDirs, file.Name) {
+				if err := unpackPackageDirectory(zipR, file.Name, filepath.Join(destFolder, file.Name)); err != nil {
+					return nil, err
+				}
+			}
+		}
+	}
+
+	return p, nil
+}
+
+func unpackPackageDirectory(r *zip.ReadCloser, archiveDir, dest string) error {
+	archiveDir = strings.Trim(archiveDir, "/")
+	if archiveDir == "" || !filepath.IsLocal(filepath.FromSlash(archiveDir)) {
+		return fmt.Errorf("invalid archive directory: %q", archiveDir)
+	}
+
+	root, err := filepath.Abs(dest)
+	if err != nil {
+		return fmt.Errorf("resolve destination: %w", err)
+	}
+
+	for _, f := range r.File {
+		name := f.Name
+
+		if strings.Contains(name, `\`) {
+			return fmt.Errorf("invalid ZIP entry: %q", name)
+		}
+
+		name = strings.TrimSuffix(name, "/")
+
+		if !strings.HasPrefix(name, archiveDir+"/") {
+			continue
+		}
+
+		rel := strings.TrimPrefix(name, archiveDir+"/")
+		if rel == "" || !filepath.IsLocal(filepath.FromSlash(rel)) {
+			return fmt.Errorf("invalid ZIP entry path: %q", f.Name)
+		}
+
+		target := filepath.Join(root, filepath.FromSlash(rel))
+
+		mode := f.Mode()
+		if mode&os.ModeSymlink != 0 ||
+			(!mode.IsRegular() && !mode.IsDir()) {
+			return fmt.Errorf("unsupported ZIP entry type: %q", f.Name)
+		}
+
+		if mode.IsDir() {
+			if err := os.MkdirAll(target, 0755); err != nil {
+				return fmt.Errorf("create directory %q: %w", target, err)
+			}
+			continue
+		}
+
+		if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+			return fmt.Errorf("create parent directory: %w", err)
+		}
+
+		rc, err := f.Open()
+		if err != nil {
+			return fmt.Errorf("open ZIP entry %q: %w", f.Name, err)
+		}
+
+		out, err := os.OpenFile(
+			target,
+			os.O_WRONLY|os.O_CREATE|os.O_TRUNC,
+			mode.Perm()&0755,
+		)
+		if err != nil {
+			rc.Close()
+			return fmt.Errorf("create file %q: %w", target, err)
+		}
+
+		_, copyErr := io.Copy(out, rc)
+		outErr := out.Close()
+		rcErr := rc.Close()
+
+		if copyErr != nil {
+			return fmt.Errorf("extract %q: %w", f.Name, copyErr)
+		}
+		if outErr != nil {
+			return fmt.Errorf("close output %q: %w", target, outErr)
+		}
+		if rcErr != nil {
+			return fmt.Errorf("close ZIP entry %q: %w", f.Name, rcErr)
+		}
+	}
+
+	return nil
 }
