@@ -72,11 +72,11 @@ func (p PackageType) Valid() bool {
 	}
 }
 
-// ParseConfig decodes the p.dir/scintilla.toml configuration file using [toml.DecodeFile],
+// ParseConfig decodes the p.Dir/scintilla.toml configuration file using [toml.DecodeFile],
 // and writes the parsed [PackageConf] to p.Conf along with its metadata.
 func (p *Package) ParseConfig() error {
 	var conf *PackageConf
-	metadata, err := toml.DecodeFile("scintilla.toml", &conf)
+	metadata, err := toml.DecodeFile(filepath.Join(p.Dir, "scintilla.toml"), &conf)
 	if err != nil {
 		return err
 	}
@@ -87,7 +87,7 @@ func (p *Package) ParseConfig() error {
 
 // Valid checks if scintilla.toml file exists.
 func (p *Package) Exists() bool {
-	_, configErr := os.Lstat("scintilla.toml")
+	_, configErr := os.Lstat(filepath.Join(p.Dir, "scintilla.toml"))
 	if configErr != nil && os.IsNotExist(configErr) {
 		return false
 	}
@@ -101,7 +101,7 @@ func (p *Package) Exists() bool {
 // package directory.
 func (p *Package) CreateGitignore() error {
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s\n", p.Conf.ObjectsDir)
+	fmt.Fprintf(&b, "%s\n", filepath.Join(p.Dir, p.Conf.ObjectsDir))
 	b.WriteString("compile_commands.json\n")
 	b.WriteString(p.Conf.TargetFile)
 	b.WriteRune('\n')
@@ -122,20 +122,22 @@ func (p *Package) CreateGitignore() error {
 // invoke the `clang++` executable (prints its combined output into the
 // console on error).
 func (p *Package) Compile() error {
-	if err := os.Mkdir(p.Conf.ObjectsDir, os.ModeAppend|os.ModePerm); os.IsExist(err) {
-		os.RemoveAll(p.Conf.ObjectsDir)
-		os.Mkdir(p.Conf.ObjectsDir, os.ModeAppend|os.ModePerm)
+	objsDirPath := filepath.Join(p.Dir, p.Conf.ObjectsDir)
+	if err := os.Mkdir(objsDirPath, os.ModeAppend|os.ModePerm); os.IsExist(err) {
+		os.RemoveAll(objsDirPath)
+		os.Mkdir(objsDirPath, os.ModeAppend|os.ModePerm)
 	}
 	baseArgs := p.baseCompileArgs()
 	for _, src := range p.Conf.Sources {
+		finalSrc := filepath.Join(p.Dir, src)
 		objFilename, _ := strings.CutSuffix(src, ".cxx")
 		objFilename += ".obj"
-		objPath := filepath.Join(p.Conf.ObjectsDir, objFilename)
+		objPath := filepath.Join(p.Dir, p.Conf.ObjectsDir, objFilename)
 		finalArgs := slices.Concat(baseArgs, []string{
 			"-c",
 			"-o",
 			objPath,
-			src,
+			finalSrc,
 		})
 
 		cmd := exec.Command(
@@ -234,12 +236,14 @@ func (p *Package) Archive() error {
 // Returns an error if invoking `bear` failed (prints its combined output into
 // the console on error).
 func (p *Package) GenerateCompilationDatabase() error {
-	if err := os.Mkdir(p.Conf.ObjectsDir, os.ModeAppend|os.ModePerm); os.IsExist(err) {
-		os.RemoveAll(p.Conf.ObjectsDir)
-		os.Mkdir(p.Conf.ObjectsDir, os.ModeAppend|os.ModePerm)
+	objsDirPath := filepath.Join(p.Dir, p.Conf.ObjectsDir)
+	if err := os.Mkdir(objsDirPath, os.ModeAppend|os.ModePerm); os.IsExist(err) {
+		os.RemoveAll(objsDirPath)
+		os.Mkdir(objsDirPath, os.ModeAppend|os.ModePerm)
 	}
 	baseArgs := p.baseCompileArgs()
 	for _, src := range p.Conf.Sources {
+		finalSrc := filepath.Join(p.Dir, src)
 		objFilename, _ := strings.CutSuffix(src, ".cxx")
 		objFilename += ".obj"
 		objPath := filepath.Join(p.Conf.ObjectsDir, objFilename)
@@ -247,7 +251,7 @@ func (p *Package) GenerateCompilationDatabase() error {
 			"-c",
 			"-o",
 			objPath,
-			src,
+			finalSrc,
 		})
 		cmd := exec.Command(
 			"bear",
@@ -297,7 +301,7 @@ func (p *Package) packProgram() error {
 		return err
 	}
 
-	if err := p.packFile(writer, "scintilla.toml", "scintilla.toml"); err != nil {
+	if err := p.packFile(writer, filepath.Join(p.Dir, "scintilla.toml"), "scintilla.toml"); err != nil {
 		writer.Close()
 		return err
 	}
@@ -325,7 +329,7 @@ func (p *Package) packLibrary() error {
 		return err
 	}
 
-	if err := p.packFile(writer, "scintilla.toml", "scintilla.toml"); err != nil {
+	if err := p.packFile(writer, filepath.Join(p.Dir, "scintilla.toml"), "scintilla.toml"); err != nil {
 		writer.Close()
 		return err
 	}
@@ -420,7 +424,7 @@ func (p *Package) packDirectory(writer *zip.Writer, sourceDir string) error {
 }
 
 func (p *Package) objectFiles() []string {
-	objects, _ := filepath.Glob(filepath.Join(p.Conf.ObjectsDir, "*.obj"))
+	objects, _ := filepath.Glob(filepath.Join(p.Dir, p.Conf.ObjectsDir, "*.obj"))
 	return objects
 }
 
@@ -457,7 +461,7 @@ func (p *PackageEnv) UnpackDependencies() error {
 		}
 		if d.Conf.Type == PackageTypeLib {
 			for _, inc := range d.Conf.IncludeDirs {
-				str := filepath.Join(dest, inc)
+				str, _ := filepath.Rel(dest, inc)
 				p.MainPackage.Conf.IncludeDirs = append(p.MainPackage.Conf.IncludeDirs, str)
 			}
 			p.MainPackage.Conf.LibraryDirs = append(p.MainPackage.Conf.LibraryDirs, dest)
