@@ -101,11 +101,11 @@ func (p *Package) Exists() bool {
 // package directory.
 func (p *Package) CreateGitignore() error {
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s\n", filepath.Join(p.Dir, p.Conf.ObjectsDir))
+	fmt.Fprintf(&b, "%s\n", p.Conf.ObjectsDir)
 	b.WriteString("compile_commands.json\n")
 	b.WriteString(p.Conf.TargetFile)
 	b.WriteRune('\n')
-	f, err := os.Create(".gitignore")
+	f, err := os.Create(filepath.Join(p.Dir, ".gitignore"))
 	if err != nil {
 		return err
 	}
