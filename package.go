@@ -478,8 +478,8 @@ func (p *PackageEnv) UnpackDependencies() error {
 				return fmt.Errorf("invalid library target filename: must start with \"lib\" and end with \".a\"")
 			}
 			libraryName, _ := strings.CutPrefix(d.Conf.TargetFile, "lib")
-			libraryName, _ = strings.CutSuffix(d.Conf.TargetFile, ".a")
-			d.Conf.LinkerFlags = append(d.Conf.LinkerFlags, fmt.Sprintf("-l%s", libraryName))
+			libraryName, _ = strings.CutSuffix(libraryName, ".a")
+			p.MainPackage.Conf.LinkerFlags = append(p.MainPackage.Conf.LinkerFlags, fmt.Sprintf("-l%s", libraryName))
 		}
 		p.DependencyPackages = append(p.DependencyPackages, d)
 	}
@@ -573,7 +573,7 @@ func UnpackPackage(archivePath string, destFolder string) (*Package, error) {
 		if parsedPackageConf && p.Conf.TargetFile == file.Name {
 			targetPath := filepath.Join(destFolder, p.Conf.TargetFile)
 			r, err := file.Open()
-			if err != nil {
+			if err != nil { 
 				return nil, err
 			}
 
