@@ -32,13 +32,14 @@ func Init() *cobra.Command {
 			}
 
 			conf := &scintilla.PackageConf{
-				Type:          packageType,
-				ObjectsDir:    ".objs",
-				CompilerFlags: []string{},
-				LinkerFlags:   []string{},
-				IncludeDirs:   []string{},
-				LibraryDirs:   []string{},
-				Dependencies:  []string{},
+				Type:               packageType,
+				ObjectsDir:         ".objs",
+				CompilerFlags:      []string{},
+				LinkerFlags:        []string{},
+				IncludeDirs:        []string{},
+				LibraryDirs:        []string{},
+				DependencyZipFiles: []string{},
+				DependencyPaths:    []string{},
 			}
 
 			switch packageType {

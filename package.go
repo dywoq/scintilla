@@ -27,16 +27,17 @@ type PackageBuildMode string
 
 // PackageConf contains the TOML configuration.
 type PackageConf struct {
-	TargetFile    string      `toml:"target_file"`
-	PackedFile    string      `toml:"packed_file"`
-	Type          PackageType `toml:"type"`
-	Sources       []string    `toml:"sources"`
-	ObjectsDir    string      `toml:"objects_dir"`
-	CompilerFlags []string    `toml:"compiler_flags"`
-	LinkerFlags   []string    `toml:"linker_flags"`
-	IncludeDirs   []string    `toml:"include_dirs"`
-	LibraryDirs   []string    `toml:"library_dirs"`
-	Dependencies  []string    `toml:"dependencies"`
+	TargetFile         string      `toml:"target_file"`
+	PackedFile         string      `toml:"packed_file"`
+	Type               PackageType `toml:"type"`
+	Sources            []string    `toml:"sources"`
+	ObjectsDir         string      `toml:"objects_dir"`
+	CompilerFlags      []string    `toml:"compiler_flags"`
+	LinkerFlags        []string    `toml:"linker_flags"`
+	IncludeDirs        []string    `toml:"include_dirs"`
+	LibraryDirs        []string    `toml:"library_dirs"`
+	DependencyZipFiles []string    `toml:"dependency_zip_files"`
+	DependencyPaths    []string    `toml:"dependency_paths"`
 }
 
 type Package struct {
@@ -143,7 +144,8 @@ func (p *Package) CreateGitignore() error {
 	b.WriteString("compile_commands.json\n")
 	b.WriteString(p.Conf.TargetFile)
 	b.WriteRune('\n')
-	b.WriteString(".scintilla")
+	b.WriteString(".scintilla\n")
+	b.WriteString("*.zip")
 	f, err := os.Create(filepath.Join(p.Dir, ".gitignore"))
 	if err != nil {
 		return err
@@ -505,7 +507,7 @@ func (p *Package) baseCompileArgs(addDir bool) []string {
 	return baseArgs
 }
 
-// UnpackDependencies iterates over the main package's dependencies archive files
+// UnpackDependencies iterates over the specified main package's dependencies archive files
 // and unpacks them using [UnpackPackage]. Creates the specified temp directory
 // if it does not exist. If a current unpacking dependency is a library,
 // the function automatically appends its include directories to the main package,
@@ -517,7 +519,7 @@ func (p *PackageEnv) UnpackDependencies() error {
 	if err := p.createTmpDir(); err != nil {
 		return err
 	}
-	for _, file := range p.MainPackage.Conf.Dependencies {
+	for _, file := range p.MainPackage.Conf.DependencyZipFiles {
 		dest := filepath.Join(p.tmpDependenciesPath(), file)
 		d, err := UnpackPackage(filepath.Join(p.MainPackage.Dir, file), dest)
 		if err != nil {
@@ -543,6 +545,39 @@ func (p *PackageEnv) UnpackDependencies() error {
 			p.MainPackage.Conf.LinkerFlags = append(p.MainPackage.Conf.LinkerFlags, fmt.Sprintf("-l%s", libraryName))
 		}
 		p.DependencyPackages = append(p.DependencyPackages, d)
+	}
+	return nil
+}
+
+// BuildDependencies builds and packs the specified main package's dependencies,
+// changing the current working directory to p.MainPackage.Dir temporarily using [os.Chdir].
+// BuildDependencies moves packed dependency files to p.MainPackage.Dir directory
+// and appends them to p.MainPackage.Conf.DependencyZipFiles.
+//
+// This function must be used before [PackageEnv.UnpackDependencies].
+func (p *PackageEnv) BuildDependencies() error {
+	if p.MainPackage.Conf == nil {
+		return errors.New("main package config is to be parsed")
+	}
+	for _, path := range p.MainPackage.Conf.DependencyPaths {
+		oldWd, _ := os.Getwd()
+		os.Chdir(p.MainPackage.Dir)
+		d := NewPackage(path)
+		if err := d.ParseConfig(); err != nil {
+			return err
+		}
+		env := NewPackageEnv(d.Dir, filepath.Join(d.Dir, ".scintilla"))
+		if err := env.UnpackDependencies(); err != nil {
+			return err
+		}
+		d.BuildMode = p.MainPackage.BuildMode
+		if err := d.Pack(); err != nil {
+			return err
+		}
+		packedFilePath := filepath.Join(path, d.Conf.PackedFile)
+		os.Rename(filepath.Join(d.Dir, d.Conf.PackedFile), packedFilePath)
+		p.MainPackage.Conf.DependencyZipFiles = append(p.MainPackage.Conf.DependencyZipFiles, d.Conf.PackedFile)
+		os.Chdir(oldWd)
 	}
 	return nil
 }

@@ -24,6 +24,9 @@ func Build() *cobra.Command {
 			p.BuildMode = scintilla.PackageBuildMode(buildModeFlag)
 			env := scintilla.NewPackageEnv(p.Dir, filepath.Join(p.Dir, ".scintilla"))
 			env.MainPackage = p
+			if err := env.BuildDependencies(); err != nil {
+				return fmt.Errorf("building dependencies failed: %v", err)
+			}
 			if err := env.UnpackDependencies(); err != nil {
 				return fmt.Errorf("unpacking dependencies failed: %v", err)
 			}
