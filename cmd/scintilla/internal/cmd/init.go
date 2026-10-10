@@ -44,11 +44,13 @@ func Init() *cobra.Command {
 			switch packageType {
 			case scintilla.PackageTypeLib:
 				conf.TargetFile = fmt.Sprintf("lib%s.a", packageName)
+				conf.PackedFile = fmt.Sprintf("lib%s.zip", packageName)
 				if err := initLibrary(packageName, conf); err != nil {
 					return err
 				}
 			case scintilla.PackageTypeProgram:
 				conf.TargetFile = fmt.Sprintf("%s.wasm", packageName)
+				conf.PackedFile = fmt.Sprintf("%s.zip", packageName)
 				if err := initProgram(packageName, conf); err != nil {
 					return err
 				}

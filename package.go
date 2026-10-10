@@ -28,6 +28,7 @@ type PackageBuildMode string
 // PackageConf contains the TOML configuration.
 type PackageConf struct {
 	TargetFile    string      `toml:"target_file"`
+	PackedFile    string      `toml:"packed_file"`
 	Type          PackageType `toml:"type"`
 	Sources       []string    `toml:"sources"`
 	ObjectsDir    string      `toml:"objects_dir"`
@@ -342,7 +343,7 @@ func (p *Package) packProgram() error {
 		return err
 	}
 
-	f, err := os.Create(fmt.Sprintf("%s.zip", p.Dir))
+	f, err := os.Create(p.Conf.PackedFile)
 	if err != nil {
 		return err
 	}
@@ -370,7 +371,7 @@ func (p *Package) packLibrary() error {
 		return err
 	}
 
-	f, err := os.Create(fmt.Sprintf("%s.zip", p.Dir))
+	f, err := os.Create(p.Conf.PackedFile)
 	if err != nil {
 		return err
 	}
