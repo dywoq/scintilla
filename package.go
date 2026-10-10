@@ -20,6 +20,11 @@ import (
 // PackageType identifies the type of a Scintilla package.
 type PackageType string
 
+// PackageBuildMode identifies the build mode of a package. Depending on the chosen build mode,
+// a set of corresponding macros and flags are activated, which are described in the documentation
+// of PackageBuildMode's constants.
+type PackageBuildMode string
+
 // PackageConf contains the TOML configuration.
 type PackageConf struct {
 	TargetFile    string      `toml:"target_file"`
@@ -58,6 +63,25 @@ func NewPackageEnv(mainPackageDir string, tempDir string) *PackageEnv {
 const (
 	PackageTypeLib     PackageType = "lib"
 	PackageTypeProgram PackageType = "program"
+)
+
+const (
+	// PackageBuildModeRelease is a build mode where a package's build is optimized and
+	// has no debugging symbols. The following macros are defined:
+	//
+	// 	RELEASE
+	//
+	// The following flags are applied to Clang compiler:
+	//
+	// 	-O2
+	PackageBuildModeRelease PackageBuildMode = "release"
+
+	// PackageBuildModeRelease is a build mode where a package's build is non-optimized and
+	// has debugging symbols. The following macros are defined:
+	//
+	// 	DEBUG
+	//
+	PackageBuildModeDebug PackageBuildMode = "debug"
 )
 
 // Valid checks if p equals to all constants having the [PackageType] type.
@@ -573,7 +597,7 @@ func UnpackPackage(archivePath string, destFolder string) (*Package, error) {
 		if parsedPackageConf && p.Conf.TargetFile == file.Name {
 			targetPath := filepath.Join(destFolder, p.Conf.TargetFile)
 			r, err := file.Open()
-			if err != nil { 
+			if err != nil {
 				return nil, err
 			}
 
