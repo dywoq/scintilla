@@ -42,6 +42,7 @@ type Package struct {
 	Dir          string
 	Conf         *PackageConf `toml:"config"`
 	ConfMetadata toml.MetaData
+	BuildMode    PackageBuildMode
 }
 
 type PackageEnv struct {
@@ -84,10 +85,24 @@ const (
 	PackageBuildModeDebug PackageBuildMode = "debug"
 )
 
-// Valid checks if p equals to all constants having the [PackageType] type.
+var (
+	ErrInvalidPackageBuildMode = errors.New("invalid package's build mode")
+)
+
+// Valid checks if p equals to any of constants having the [PackageType] type.
 func (p PackageType) Valid() bool {
 	switch p {
 	case PackageTypeLib, PackageTypeProgram:
+		return true
+	default:
+		return false
+	}
+}
+
+// Valid checks if p equals to any of constants having the [PackageBuildMode] type.
+func (p PackageBuildMode) Valid() bool {
+	switch p {
+	case PackageBuildModeRelease, PackageBuildModeDebug:
 		return true
 	default:
 		return false
@@ -144,7 +159,13 @@ func (p *Package) CreateGitignore() error {
 // Returns an error if it failed to create an objects directory or
 // invoke the `clang++` executable (prints its combined output into the
 // console on error).
+//
+// Returns [ErrInvalidPackageBuildMode] if [PackageBuildMode.Valid] returns
+// false.
 func (p *Package) Compile() error {
+	if !p.BuildMode.Valid() {
+		return ErrInvalidPackageBuildMode
+	}
 	objsDirPath := filepath.Join(p.Dir, p.Conf.ObjectsDir)
 	if err := os.Mkdir(objsDirPath, os.ModeAppend|os.ModePerm); os.IsExist(err) {
 		os.RemoveAll(objsDirPath)
@@ -260,7 +281,13 @@ func (p *Package) Archive() error {
 //
 // Returns an error if invoking `bear` failed (prints its combined output into
 // the console on error).
+//
+// Returns [ErrInvalidPackageBuildMode] if [PackageBuildMode.Valid] returns
+// false.
 func (p *Package) GenerateCompilationDatabase() error {
+	if !p.BuildMode.Valid() {
+		return ErrInvalidPackageBuildMode
+	}
 	objsDirPath := filepath.Join(p.Dir, p.Conf.ObjectsDir)
 	if err := os.Mkdir(objsDirPath, os.ModeAppend|os.ModePerm); os.IsExist(err) {
 		os.RemoveAll(objsDirPath)
@@ -458,6 +485,7 @@ func (p *Package) baseCompileArgs(addDir bool) []string {
 		"--target=wasm32-unknown-unknown",
 		"-nostdlib",
 	}, p.Conf.CompilerFlags)
+
 	for _, inc := range p.Conf.IncludeDirs {
 		finalInc := inc
 		if addDir {
@@ -465,6 +493,14 @@ func (p *Package) baseCompileArgs(addDir bool) []string {
 		}
 		baseArgs = append(baseArgs, fmt.Sprintf("-I%s", finalInc))
 	}
+
+	switch p.BuildMode {
+	case PackageBuildModeRelease:
+		baseArgs = append(baseArgs, "-DRELEASE", "-O2")
+	case PackageBuildModeDebug:
+		baseArgs = append(baseArgs, "-DDEBUG")
+	}
+
 	return baseArgs
 }
 

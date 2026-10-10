@@ -20,6 +20,8 @@ func Pack() *cobra.Command {
 			if err := p.ParseConfig(); err != nil {
 				return fmt.Errorf("parsing config failed: %v", err)
 			}
+			buildModeFlag, _ := cmd.Flags().GetString("build_mode")
+			p.BuildMode = scintilla.PackageBuildMode(buildModeFlag)
 			env := scintilla.NewPackageEnv(p.Dir, filepath.Join(p.Dir, ".scintilla"))
 			env.MainPackage = p
 			if err := env.UnpackDependencies(); err != nil {
@@ -31,5 +33,6 @@ func Pack() *cobra.Command {
 			return nil
 		},
 	}
+	pack.Flags().String("build_mode", "debug", "package's build mode")
 	return pack
 }
