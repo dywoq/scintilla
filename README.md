@@ -32,7 +32,8 @@ go install github.com/dywoq/scintilla/cmd/scintilla@latest
 # Documentation
 
 The folder [`docs/`](https://github.com/dywoq/scintilla/tree/main/docs) gives a comprehensive description
-of available Scintilla commands and configuration keys.
+of available Scintilla commands and configuration keys. Its public programming interface is available
+in https://pkg.go.dev.
 
 # License
 
