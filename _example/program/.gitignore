@@ -1,0 +1,5 @@
+.objs
+compile_commands.json
+program.wasm
+.scintilla
+*.zip

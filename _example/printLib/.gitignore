@@ -1,0 +1,5 @@
+.objs
+compile_commands.json
+libprintLib.a
+.scintilla
+*.zip

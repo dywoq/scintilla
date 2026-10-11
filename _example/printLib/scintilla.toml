@@ -1,0 +1,11 @@
+target_file = "libprintLib.a"
+packed_file = "libprintLib.zip"
+type = "lib"
+sources = ["print.cxx"]
+objects_dir = ".objs"
+compiler_flags = []
+linker_flags = []
+include_dirs = ["include/"]
+library_dirs = []
+dependency_zip_files = []
+dependency_paths = []

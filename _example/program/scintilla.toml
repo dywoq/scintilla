@@ -1,0 +1,11 @@
+target_file = "program.wasm"
+packed_file = "program.zip"
+type = "program"
+sources = ["main.cxx"]
+objects_dir = ".objs"
+compiler_flags = []
+linker_flags = []
+include_dirs = []
+library_dirs = []
+dependency_zip_files = []
+dependency_paths = ["../printLib"]
