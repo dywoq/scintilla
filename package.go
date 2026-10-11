@@ -586,6 +586,7 @@ func (p *Package) baseCompileArgs(addDir bool) []string {
 	baseArgs := slices.Concat([]string{
 		"--target=wasm32-unknown-unknown",
 		"-nostdlib",
+		"-ffreestanding",
 	}, p.Conf.CompilerFlags)
 
 	for _, inc := range p.Conf.IncludeDirs {
