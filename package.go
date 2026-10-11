@@ -531,7 +531,7 @@ func (p *PackageEnv) UnpackDependencies() error {
 		}
 		if d.Conf.Type == PackageTypeLib {
 			for _, inc := range d.Conf.IncludeDirs {
-				str, _ := filepath.Rel(p.MainPackage.Dir, filepath.Join(source, inc))
+				str, _ := filepath.Rel(p.MainPackage.Dir, filepath.Join(dest, inc))
 				p.MainPackage.Conf.IncludeDirs = append(p.MainPackage.Conf.IncludeDirs, str)
 			}
 			p.MainPackage.Conf.LibraryDirs = append(p.MainPackage.Conf.LibraryDirs, dest)
