@@ -352,24 +352,15 @@ func (p *Package) packProgram() error {
 	if err := p.Link(); err != nil {
 		return err
 	}
-
-	f, err := os.Create(p.Conf.PackedFile)
+	f, writer, err := p.createZipWriter()
 	if err != nil {
 		return err
 	}
 	defer f.Close()
-
-	writer := zip.NewWriter(f)
-	if err := p.packFile(writer, filepath.Join(p.Dir, p.Conf.TargetFile), p.Conf.TargetFile); err != nil {
-		writer.Close()
+	defer writer.Close()
+	if err := p.writeBaseFilesToZip(writer); err != nil {
 		return err
 	}
-
-	if err := p.packFile(writer, filepath.Join(p.Dir, "scintilla.toml"), "scintilla.toml"); err != nil {
-		writer.Close()
-		return err
-	}
-
 	return writer.Close()
 }
 
@@ -377,32 +368,40 @@ func (p *Package) packLibrary() error {
 	if err := p.Archive(); err != nil {
 		return err
 	}
-
-	f, err := os.Create(p.Conf.PackedFile)
+	f, writer, err := p.createZipWriter()
 	if err != nil {
 		return err
 	}
 	defer f.Close()
-
-	writer := zip.NewWriter(f)
-	if err := p.packFile(writer, filepath.Join(p.Dir, p.Conf.TargetFile), p.Conf.TargetFile); err != nil {
-		writer.Close()
+	defer writer.Close()
+	if err := p.writeBaseFilesToZip(writer); err != nil {
 		return err
 	}
-
-	if err := p.packFile(writer, filepath.Join(p.Dir, "scintilla.toml"), "scintilla.toml"); err != nil {
-		writer.Close()
-		return err
-	}
-
 	for _, inc := range p.Conf.IncludeDirs {
 		if err := p.packDirectory(writer, filepath.Join(p.Dir, inc)); err != nil {
 			writer.Close()
 			return err
 		}
 	}
-
 	return writer.Close()
+}
+
+func (p *Package) createZipWriter() (*os.File, *zip.Writer, error) {
+	f, err := os.Create(p.Conf.PackedFile)
+	if err != nil {
+		return nil, nil, err
+	}
+	return f, zip.NewWriter(f), nil
+}
+
+func (p *Package) writeBaseFilesToZip(w *zip.Writer) error {
+	if err := p.packFile(w, filepath.Join(p.Dir, p.Conf.TargetFile), p.Conf.TargetFile); err != nil {
+		return err
+	}
+	if err := p.packFile(w, filepath.Join(p.Dir, "scintilla.toml"), "scintilla.toml"); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (p *Package) packFile(writer *zip.Writer, physicalFilepath string, zipFilepath string) error {
