@@ -5,7 +5,6 @@ package cmd
 
 import (
 	"fmt"
-	"path/filepath"
 
 	"github.com/dywoq/scintilla"
 	"github.com/spf13/cobra"
@@ -23,7 +22,7 @@ func Compiledb() *cobra.Command {
 			}
 			buildModeFlag, _ := cmd.Flags().GetString("build_mode")
 			p.BuildMode = scintilla.PackageBuildMode(buildModeFlag)
-			env := scintilla.NewPackageEnv(p.Dir, filepath.Join(p.Dir, ".scintilla"))
+			env := scintilla.NewPackageEnv(p.Dir)
 			env.MainPackage = p
 			if err := env.BuildDependencies(); err != nil {
 				return fmt.Errorf("building dependencies failed: %v", err)

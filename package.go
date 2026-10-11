@@ -65,7 +65,7 @@ func NewPackage(dir string) *Package {
 	return &Package{Conf: new(PackageConf), Dir: dir}
 }
 
-func NewPackageEnv(mainPackageDir string, tempDir string) *PackageEnv {
+func NewPackageEnv(mainPackageDir string) *PackageEnv {
 	return &PackageEnv{
 		MainPackage:        NewPackage(mainPackageDir),
 		DependencyPackages: []*Package{},
@@ -224,7 +224,7 @@ func (p *Package) Compile() error {
 	}
 	baseArgs := p.baseCompileArgs(true)
 	for _, src := range p.Conf.Sources {
-		finalSrc, objPath := p.convertSrcToObj(src)
+		finalSrc, objPath := p.convertSrcToObj(src, true)
 		finalArgs := slices.Concat(baseArgs, []string{
 			"-c",
 			"-o",
@@ -368,7 +368,7 @@ func (p *Package) GenerateCompilationDatabase() error {
 	}
 	baseArgs := p.baseCompileArgs(false)
 	for _, src := range p.Conf.Sources {
-		finalSrc, objPath := p.convertSrcToObj(src)
+		finalSrc, objPath := p.convertSrcToObj(src, false)
 		finalArgs := slices.Concat([]string{"--", "clang++"}, baseArgs, []string{
 			"-c",
 			"-o",
@@ -410,8 +410,11 @@ func (p *Package) Pack() error {
 	}
 }
 
-func (p *Package) convertSrcToObj(src string) (finalSrc string, objPath string) {
-	finalSrc = filepath.Join(p.Dir, src)
+func (p *Package) convertSrcToObj(src string, addDir bool) (finalSrc string, objPath string) {
+	finalSrc = p.Dir
+	if addDir {
+		finalSrc = filepath.Join(p.Dir, src)
+	}
 	objFilename, _ := strings.CutSuffix(src, ".cxx")
 	objFilename += ".obj"
 	objPath = filepath.Join(p.Dir, p.Conf.ObjectsDir, objFilename)
@@ -681,7 +684,7 @@ func (p *PackageEnv) BuildDependencies() error {
 		if err := d.ParseConfig(); err != nil {
 			return err
 		}
-		env := NewPackageEnv(d.Dir, filepath.Join(d.Dir, ".scintilla"))
+		env := NewPackageEnv(d.Dir)
 		env.MainPackage = d
 		if err := env.BuildDependencies(); err != nil {
 			return err
