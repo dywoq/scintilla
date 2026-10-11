@@ -15,10 +15,10 @@ scintilla build [package_dir]
 
 **Description**: This command opens the package. Before building the main package,
 `build` builds and unpacks dependencies, automatically specifying include directories and
-libraries to the compiler/linker flags. Depending on the package's type:
+libraries to the main package's compiler/linker flags. Depending on the package's type:
 
-- `lib`: Archives the package.
-- `program`: Links the package.
+- `lib`: Archives the main package.
+- `program`: Links the main package.
 
 Consider that your local machine must have [LLVM Project](https://github.com/llvm/llvm-project) installed
 (the minimal version is `22.1`).
@@ -59,8 +59,8 @@ scintilla compiledb [package_dir]
 ```
 
 **Description**: This command runs the same operations as `build`. However, it generates a compilation
-database relying on [Bear](https://github.com/rizsotto/bear), temporarily setting the current working
-directory to the specified package directory.
+database, relying on [Bear](https://github.com/rizsotto/bear) and temporarily setting the current working
+directory to the specified package directory (`package_dir`).
 
 **Flags**:
 
