@@ -52,6 +52,14 @@ type PackageEnv struct {
 	DependencyPackages []*Package
 }
 
+// PackageErrorSrc identifies the origin of an error.
+type PackageErrorSrc uint8
+
+type PackageError struct {
+	Err error
+	Src PackageErrorSrc
+}
+
 func NewPackage(dir string) *Package {
 	return &Package{Conf: new(PackageConf), Dir: dir}
 }
@@ -83,12 +91,23 @@ const (
 	// has debugging symbols. The following macros are defined:
 	//
 	// 	DEBUG
-	//
 	PackageBuildModeDebug PackageBuildMode = "debug"
+)
+
+const (
+	PackageErrorSrcCompile PackageErrorSrc = iota
+	PackageErrorSrcLink
+	PackageErrorSrcCompilationDatabase
+	PackageErrorSrcArchive
+	PackageErrorSrcPack
+	PackageErrorSrcUnpack
+	PackageErrorSrcBuildDependencies
 )
 
 var (
 	ErrInvalidPackageBuildMode = errors.New("invalid package's build mode")
+	ErrUnknownPackageType      = errors.New("unknown package type")
+	ErrPackageConfNotParsed    = errors.New("package config is not parsed")
 )
 
 // Valid checks if p equals to any of constants having the [PackageType] type.
@@ -109,6 +128,30 @@ func (p PackageBuildMode) Valid() bool {
 	default:
 		return false
 	}
+}
+
+func (p PackageErrorSrc) String() string {
+	switch p {
+	case PackageErrorSrcCompile:
+		return "Compile"
+	case PackageErrorSrcLink:
+		return "Link"
+	case PackageErrorSrcCompilationDatabase:
+		return "CompilationDatabase"
+	case PackageErrorSrcArchive:
+		return "Archive"
+	case PackageErrorSrcPack:
+		return "Pack"
+	case PackageErrorSrcUnpack:
+		return "Unpack"
+	case PackageErrorSrcBuildDependencies:
+		return "BuildDependencies"
+	}
+	return "unknown"
+}
+
+func (p *PackageError) Error() string {
+	return fmt.Sprintf("%v { source: %s }", p.Err, p.Src)
 }
 
 // ParseConfig decodes the p.Dir/scintilla.toml configuration file using [toml.DecodeFile],
@@ -167,10 +210,16 @@ func (p *Package) CreateGitignore() error {
 // false.
 func (p *Package) Compile() error {
 	if !p.BuildMode.Valid() {
-		return ErrInvalidPackageBuildMode
+		return &PackageError{
+			Err: ErrInvalidPackageBuildMode,
+			Src: PackageErrorSrcCompile,
+		}
 	}
 	if err := p.createObjsDir(); err != nil {
-		return err
+		return &PackageError{
+			Src: PackageErrorSrcCompile,
+			Err: fmt.Errorf("failed to create objects directory: %v", err),
+		}
 	}
 	baseArgs := p.baseCompileArgs(true)
 	for _, src := range p.Conf.Sources {
@@ -188,7 +237,10 @@ func (p *Package) Compile() error {
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			fmt.Print(string(output))
-			return err
+			return &PackageError{
+				Err: err,
+				Src: PackageErrorSrcCompile,
+			}
 		}
 	}
 	return nil
@@ -205,12 +257,18 @@ func (p *Package) Link() error {
 		return err
 	}
 	if p.Conf.Type != PackageTypeProgram {
-		return fmt.Errorf("cannot link non-program package")
+		return &PackageError{
+			Err: fmt.Errorf("cannot link a library package"),
+			Src: PackageErrorSrcLink,
+		}
 	}
 
 	objects := p.objectFiles()
 	if objects == nil {
-		return fmt.Errorf("objects are not found in the %q directory", p.Conf.ObjectsDir)
+		return &PackageError{
+			Err: fmt.Errorf("objects are not found in the %q directory", p.Conf.ObjectsDir),
+			Src: PackageErrorSrcLink,
+		}
 	}
 	targetFilePath := filepath.Join(p.Dir, p.Conf.TargetFile)
 	if _, err := os.Lstat(targetFilePath); os.IsExist(err) {
@@ -231,7 +289,10 @@ func (p *Package) Link() error {
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		fmt.Print(string(output))
-		return err
+		return &PackageError{
+			Err: fmt.Errorf("linking failed: %v", err),
+			Src: PackageErrorSrcLink,
+		}
 	}
 	return nil
 }
@@ -247,11 +308,17 @@ func (p *Package) Archive() error {
 		return err
 	}
 	if p.Conf.Type != PackageTypeLib {
-		return fmt.Errorf("cannot archive non-library package")
+		return &PackageError{
+			Err: fmt.Errorf("cannot archive a program package"),
+			Src: PackageErrorSrcArchive,
+		}
 	}
 	objects := p.objectFiles()
 	if objects == nil {
-		return fmt.Errorf("objects are not found in the %q directory", p.Conf.ObjectsDir)
+		return &PackageError{
+			Err: fmt.Errorf("objects are not found in the %q directory", p.Conf.ObjectsDir),
+			Src: PackageErrorSrcArchive,
+		}
 	}
 	targetFilePath := filepath.Join(p.Dir, p.Conf.TargetFile)
 	if _, err := os.Lstat(targetFilePath); os.IsExist(err) {
@@ -268,7 +335,10 @@ func (p *Package) Archive() error {
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		fmt.Print(string(output))
-		return err
+		return &PackageError{
+			Err: fmt.Errorf("archiving failed: %v", err),
+			Src: PackageErrorSrcLink,
+		}
 	}
 	return nil
 }
@@ -284,10 +354,16 @@ func (p *Package) Archive() error {
 // false.
 func (p *Package) GenerateCompilationDatabase() error {
 	if !p.BuildMode.Valid() {
-		return ErrInvalidPackageBuildMode
+		return &PackageError{
+			Err: ErrInvalidPackageBuildMode,
+			Src: PackageErrorSrcCompile,
+		}
 	}
 	if err := p.createObjsDir(); err != nil {
-		return err
+		return &PackageError{
+			Src: PackageErrorSrcCompile,
+			Err: fmt.Errorf("failed to create objects directory: %v", err),
+		}
 	}
 	baseArgs := p.baseCompileArgs(false)
 	for _, src := range p.Conf.Sources {
@@ -306,7 +382,10 @@ func (p *Package) GenerateCompilationDatabase() error {
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			fmt.Print(string(output))
-			return err
+			return &PackageError{
+				Err: fmt.Errorf("generating compilation database failed: %v", err),
+				Src: PackageErrorSrcCompilationDatabase,
+			}
 		}
 	}
 	return nil
@@ -324,7 +403,10 @@ func (p *Package) Pack() error {
 	case PackageTypeLib:
 		return p.packLibrary()
 	}
-	return fmt.Errorf("unknown package type %q", p.Conf.Type)
+	return &PackageError{
+		Err: ErrUnknownPackageType,
+		Src: PackageErrorSrcPack,
+	}
 }
 
 func (p *Package) convertSrcToObj(src string) (finalSrc string, objPath string) {
@@ -389,17 +471,26 @@ func (p *Package) packLibrary() error {
 func (p *Package) createZipWriter() (*os.File, *zip.Writer, error) {
 	f, err := os.Create(p.Conf.PackedFile)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, &PackageError{
+			Err: fmt.Errorf("creating %q failed: %v", p.Conf.PackedFile, err),
+			Src: PackageErrorSrcPack,
+		}
 	}
 	return f, zip.NewWriter(f), nil
 }
 
 func (p *Package) writeBaseFilesToZip(w *zip.Writer) error {
 	if err := p.packFile(w, filepath.Join(p.Dir, p.Conf.TargetFile), p.Conf.TargetFile); err != nil {
-		return err
+		return &PackageError{
+			Err: fmt.Errorf("packing %q file failed: %v", p.Conf.TargetFile, err),
+			Src: PackageErrorSrcPack,
+		}
 	}
 	if err := p.packFile(w, filepath.Join(p.Dir, "scintilla.toml"), "scintilla.toml"); err != nil {
-		return err
+		return &PackageError{
+			Err: fmt.Errorf("packing scintilla.toml file failed: %v", err),
+			Src: PackageErrorSrcPack,
+		}
 	}
 	return nil
 }
@@ -518,7 +609,10 @@ func (p *Package) baseCompileArgs(addDir bool) []string {
 // and links against its static library file.
 func (p *PackageEnv) UnpackDependencies() error {
 	if p.MainPackage.Conf == nil {
-		return errors.New("main package config is to be parsed")
+		return &PackageError{
+			Err: ErrPackageConfNotParsed,
+			Src: PackageErrorSrcUnpack,
+		}
 	}
 	if err := p.createTmpDir(p.MainPackage.Dir); err != nil {
 		return err
@@ -543,7 +637,10 @@ func (p *PackageEnv) UnpackDependencies() error {
 			// it has the "lib" prefix and ".a" suffix. Later, we cut these off to make it a
 			// linker flag in the main package configuration.
 			if !strings.HasPrefix(d.Conf.TargetFile, "lib") || !strings.HasSuffix(d.Conf.TargetFile, ".a") {
-				return fmt.Errorf("invalid library target filename: must start with \"lib\" and end with \".a\"")
+				return &PackageError{
+					Err: fmt.Errorf("invalid library target filename: must start with \"lib\" and end with \".a\""),
+					Src: PackageErrorSrcUnpack,
+				}
 			}
 			libraryName, _ := strings.CutPrefix(d.Conf.TargetFile, "lib")
 			libraryName, _ = strings.CutSuffix(libraryName, ".a")
@@ -562,14 +659,23 @@ func (p *PackageEnv) UnpackDependencies() error {
 // This function must be used before [PackageEnv.UnpackDependencies].
 func (p *PackageEnv) BuildDependencies() error {
 	if p.MainPackage.Conf == nil {
-		return errors.New("main package config is to be parsed")
+		return &PackageError{
+			Err: ErrPackageConfNotParsed,
+			Src: PackageErrorSrcBuildDependencies,
+		}
 	}
 	if err := p.createTmpDir(p.MainPackage.Dir); err != nil {
 		return err
 	}
 	for _, path := range p.MainPackage.Conf.DependencyPaths {
 		oldWd, _ := os.Getwd()
-		os.Chdir(p.MainPackage.Dir)
+		if err := os.Chdir(p.MainPackage.Dir); err != nil {
+			return &PackageError{
+				Err: fmt.Errorf("setting working directory to %q failed: %v", p.MainPackage.Dir, err),
+				Src: PackageErrorSrcBuildDependencies,
+			}
+		}
+
 		d := NewPackage(path)
 		if err := d.ParseConfig(); err != nil {
 			return err
@@ -590,27 +696,45 @@ func (p *PackageEnv) BuildDependencies() error {
 		finalZipPath, _ := strings.CutPrefix(p.tmpZipPath(), p.MainPackage.Dir+string(os.PathSeparator))
 		newPath := filepath.Join(finalZipPath, d.Conf.PackedFile)
 		if err := os.Rename(oldPath, newPath); err != nil {
-			return err
+			return &PackageError{
+				Err: fmt.Errorf("moving %q to %q failed: %v", oldPath, newPath, err),
+				Src: PackageErrorSrcBuildDependencies,
+			}
 		}
 		p.MainPackage.Conf.DependencyZipFiles = append(p.MainPackage.Conf.DependencyZipFiles, newPath)
-		os.Chdir(oldWd)
+		if err := os.Chdir(oldWd); err != nil {
+			return &PackageError{
+				Err: fmt.Errorf("setting working directory to %q back failed: %v", oldPath, err),
+				Src: PackageErrorSrcBuildDependencies,
+			}
+		}
 	}
 	return nil
 }
 
 func (p *PackageEnv) createTmpDir(baseDir string) error {
-	// This function is supposed to create temporary directory and its entries
-	// if it does not exist
 	tmpPath := filepath.Join(baseDir, p.tmpPath())
+	dependenciesPath := filepath.Join(tmpPath, "dependencies")
+	zipPath := filepath.Join(tmpPath, "zip")
+	mode := os.ModeAppend | os.ModePerm
 	if _, err := os.Lstat(tmpPath); os.IsNotExist(err) {
-		if err := os.Mkdir(tmpPath, os.ModeAppend|os.ModePerm); err != nil {
-			return err
+		if err := os.Mkdir(tmpPath, mode); err != nil {
+			return &PackageError{
+				Err: fmt.Errorf("creating %q failed: %v", tmpPath, err),
+				Src: PackageErrorSrcUnpack,
+			}
 		}
-		if err := os.Mkdir(filepath.Join(tmpPath, "dependencies"), os.ModeAppend|os.ModePerm); err != nil {
-			return err
+		if err := os.Mkdir(dependenciesPath, mode); err != nil {
+			return &PackageError{
+				Err: fmt.Errorf("creating %q failed: %v", dependenciesPath, err),
+				Src: PackageErrorSrcUnpack,
+			}
 		}
-		if err := os.Mkdir(filepath.Join(tmpPath, "zip"), os.ModeAppend|os.ModePerm); err != nil {
-			return err
+		if err := os.Mkdir(zipPath, mode); err != nil {
+			return &PackageError{
+				Err: fmt.Errorf("creating %q failed: %v", zipPath, err),
+				Src: PackageErrorSrcUnpack,
+			}
 		}
 	}
 	return nil
@@ -638,13 +762,19 @@ func (p *PackageEnv) tmpZipPath() string {
 func UnpackPackage(archivePath string, destFolder string) (*Package, error) {
 	zipR, err := zip.OpenReader(archivePath)
 	if err != nil {
-		return nil, err
+		return nil, &PackageError{
+			Err: fmt.Errorf("opening %q archive failed: %v", archivePath, err),
+			Src: PackageErrorSrcUnpack,
+		}
 	}
 	defer zipR.Close()
 
 	if _, err := os.Lstat(destFolder); os.IsNotExist(err) {
 		if err := os.Mkdir(destFolder, os.ModePerm|os.ModeAppend); err != nil {
-			return nil, err
+			return nil, &PackageError{
+				Err: fmt.Errorf("creating %q destination directory failed: %v", destFolder, err),
+				Src: PackageErrorSrcUnpack,
+			}
 		}
 	}
 
@@ -655,16 +785,25 @@ func UnpackPackage(archivePath string, destFolder string) (*Package, error) {
 			configFilepath := filepath.Join(destFolder, "scintilla.toml")
 			r, err := file.Open()
 			if err != nil {
-				return nil, err
+				return nil, &PackageError{
+					Err: fmt.Errorf("opening scintilla.toml in the archive failed: %v", err),
+					Src: PackageErrorSrcUnpack,
+				}
 			}
 			defer r.Close()
 			f, err := os.Create(configFilepath)
 			if err != nil {
-				return nil, err
+				return nil, &PackageError{
+					Err: fmt.Errorf("creating scintilla.toml in %q failed: %v", destFolder, err),
+					Src: PackageErrorSrcUnpack,
+				}
 			}
 			defer f.Close()
 			if _, err := io.Copy(f, r); err != nil {
-				return nil, err
+				return nil, &PackageError{
+					Err: fmt.Errorf("copying scintilla.toml's data to physical scintilla.toml failed: %v", err),
+					Src: PackageErrorSrcUnpack,
+				}
 			}
 
 			p = NewPackage(destFolder)
@@ -676,35 +815,51 @@ func UnpackPackage(archivePath string, destFolder string) (*Package, error) {
 		}
 	}
 	if !parsedPackageConf {
-		return nil, fmt.Errorf("config scintilla.toml is not found in %q archive", archivePath)
+		return nil, &PackageError{
+			Err: fmt.Errorf("config scintilla.toml is not found in %q archive", archivePath),
+			Src: PackageErrorSrcUnpack,
+		}
 	}
 
 	if p.Conf.Type == PackageTypeLib {
 		for _, file := range zipR.File {
 			if file.FileInfo().IsDir() && slices.Contains(p.Conf.IncludeDirs, file.Name) {
 				if err := unpackPackageDirectory(zipR, file.Name, filepath.Join(destFolder, file.Name)); err != nil {
-					return nil, err
+					return nil, &PackageError{
+						Err: fmt.Errorf("unpacking include directory %q to %q failed", file.Name, destFolder),
+						Src: PackageErrorSrcUnpack,
+					}
 				}
 			}
 		}
 	}
 
 	for _, file := range zipR.File {
-		if parsedPackageConf && p.Conf.TargetFile == file.Name {
+		if p.Conf.TargetFile == file.Name {
 			targetPath := filepath.Join(destFolder, p.Conf.TargetFile)
 			r, err := file.Open()
 			if err != nil {
-				return nil, err
+				return nil, &PackageError{
+					Err: fmt.Errorf("opening target file %q failed: %v", file.Name, err),
+					Src: PackageErrorSrcUnpack,
+				}
 			}
 
 			f, err := os.Create(targetPath)
 			if err != nil {
-				return nil, err
+				return nil, &PackageError{
+					Err: fmt.Errorf("creating physical target file %q failed: %v", targetPath, err),
+					Src: PackageErrorSrcUnpack,
+				}
 			}
 
 			if _, err := io.Copy(f, r); err != nil {
-				return nil, err
+				return nil, &PackageError{
+					Err: fmt.Errorf("copying %q's data to physical %q failed: %v", err, file.Name, targetPath),
+					Src: PackageErrorSrcUnpack,
+				}
 			}
+			break
 		}
 	}
 
