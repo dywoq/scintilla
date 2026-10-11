@@ -1,4 +1,5 @@
-// Copyright 2026 Bellus Development Team - All Rights Reserved
+// Copyright 2026 dywoq - Apache License 2.0
+// https://github.com/dywoq/scintilla
 
 package scintilla
 
