@@ -516,11 +516,11 @@ func (p *PackageEnv) UnpackDependencies() error {
 	if p.MainPackage.Conf == nil {
 		return errors.New("main package config is to be parsed")
 	}
-	if err := p.createTmpDir(); err != nil {
+	if err := p.createTmpDir(p.MainPackage.Dir); err != nil {
 		return err
 	}
 	for _, file := range p.MainPackage.Conf.DependencyZipFiles {
-		source := filepath.Join(filepath.Join(p.MainPackage.Dir), file)
+		source := filepath.Join(p.MainPackage.Dir, file)
 		dest := filepath.Join(p.MainPackage.Dir, p.tmpDependenciesPath(), filepath.Base(file))
 		d, err := UnpackPackage(source, dest)
 		if err != nil {
@@ -560,6 +560,9 @@ func (p *PackageEnv) BuildDependencies() error {
 	if p.MainPackage.Conf == nil {
 		return errors.New("main package config is to be parsed")
 	}
+	if err := p.createTmpDir(p.MainPackage.Dir); err != nil {
+		return err
+	}
 	for _, path := range p.MainPackage.Conf.DependencyPaths {
 		oldWd, _ := os.Getwd()
 		os.Chdir(p.MainPackage.Dir)
@@ -568,6 +571,7 @@ func (p *PackageEnv) BuildDependencies() error {
 			return err
 		}
 		env := NewPackageEnv(d.Dir, filepath.Join(d.Dir, ".scintilla"))
+		env.MainPackage = d
 		if err := env.BuildDependencies(); err != nil {
 			return err
 		}
@@ -579,7 +583,8 @@ func (p *PackageEnv) BuildDependencies() error {
 			return err
 		}
 		oldPath := d.Conf.PackedFile
-		newPath := filepath.Join(p.tmpZipPath(), d.Conf.PackedFile)
+		finalZipPath, _ := strings.CutPrefix(p.tmpZipPath(), p.MainPackage.Dir+string(os.PathSeparator))
+		newPath := filepath.Join(finalZipPath, d.Conf.PackedFile)
 		if err := os.Rename(oldPath, newPath); err != nil {
 			return err
 		}
@@ -589,17 +594,18 @@ func (p *PackageEnv) BuildDependencies() error {
 	return nil
 }
 
-func (p *PackageEnv) createTmpDir() error {
+func (p *PackageEnv) createTmpDir(baseDir string) error {
 	// This function is supposed to create temporary directory and its entries
 	// if it does not exist
-	if _, err := os.Lstat(p.tmpPath()); os.IsNotExist(err) {
-		if err := os.Mkdir(p.tmpPath(), os.ModeAppend|os.ModePerm); err != nil {
+	tmpPath := filepath.Join(baseDir, p.tmpPath())
+	if _, err := os.Lstat(tmpPath); os.IsNotExist(err) {
+		if err := os.Mkdir(tmpPath, os.ModeAppend|os.ModePerm); err != nil {
 			return err
 		}
-		if err := os.Mkdir(p.tmpDependenciesPath(), os.ModeAppend|os.ModePerm); err != nil {
+		if err := os.Mkdir(filepath.Join(tmpPath, "dependencies"), os.ModeAppend|os.ModePerm); err != nil {
 			return err
 		}
-		if err := os.Mkdir(p.tmpZipPath(), os.ModeAppend|os.ModePerm); err != nil {
+		if err := os.Mkdir(filepath.Join(tmpPath, "zip"), os.ModeAppend|os.ModePerm); err != nil {
 			return err
 		}
 	}
