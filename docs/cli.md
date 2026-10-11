@@ -25,7 +25,7 @@ Consider that your local machine must have [LLVM Project](https://github.com/llv
 
 **Flags**:
 
-- `build_mode`: This flag defines a set of corresponding macros and flags, depending on the
+- `build_mode`: This flag pre-defines a set of corresponding macros and flags, depending on the
   value of this flag. **Allowed values**:
   - `release`:
     - **Defined macros**: `RELEASE`
