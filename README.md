@@ -23,7 +23,8 @@ are possible. Use it when you want to build your own ecosystem without relying o
 # Condition
 
 At the moment, the current condition of Scintilla is: **"functional, but bugs may occur and it is not
-stable yet"**. Scintilla is being actively developed.
+stable yet"**. Scintilla is being actively developed. If you encounter any bugs, please, report them
+in [GitHub Issues](https://github.com/dywoq/scintilla/issues).
 
 # Installation
 
