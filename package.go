@@ -411,7 +411,7 @@ func (p *Package) Pack() error {
 }
 
 func (p *Package) convertSrcToObj(src string, addDir bool) (finalSrc string, objPath string) {
-	finalSrc = src 
+	finalSrc = src
 	if addDir {
 		finalSrc = filepath.Join(p.Dir, src)
 	}
