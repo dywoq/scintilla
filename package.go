@@ -520,8 +520,9 @@ func (p *PackageEnv) UnpackDependencies() error {
 		return err
 	}
 	for _, file := range p.MainPackage.Conf.DependencyZipFiles {
-		dest := filepath.Join(p.tmpDependenciesPath(), file)
-		d, err := UnpackPackage(filepath.Join(p.MainPackage.Dir, file), dest)
+		source := filepath.Join(filepath.Join(p.MainPackage.Dir), file)
+		dest := filepath.Join(p.MainPackage.Dir, p.tmpDependenciesPath(), filepath.Base(file))
+		d, err := UnpackPackage(source, dest)
 		if err != nil {
 			return err
 		}
@@ -530,7 +531,7 @@ func (p *PackageEnv) UnpackDependencies() error {
 		}
 		if d.Conf.Type == PackageTypeLib {
 			for _, inc := range d.Conf.IncludeDirs {
-				str, _ := filepath.Rel(p.MainPackage.Dir, filepath.Join(dest, inc))
+				str, _ := filepath.Rel(p.MainPackage.Dir, filepath.Join(source, inc))
 				p.MainPackage.Conf.IncludeDirs = append(p.MainPackage.Conf.IncludeDirs, str)
 			}
 			p.MainPackage.Conf.LibraryDirs = append(p.MainPackage.Conf.LibraryDirs, dest)
@@ -567,6 +568,9 @@ func (p *PackageEnv) BuildDependencies() error {
 			return err
 		}
 		env := NewPackageEnv(d.Dir, filepath.Join(d.Dir, ".scintilla"))
+		if err := env.BuildDependencies(); err != nil {
+			return err
+		}
 		if err := env.UnpackDependencies(); err != nil {
 			return err
 		}
@@ -574,9 +578,12 @@ func (p *PackageEnv) BuildDependencies() error {
 		if err := d.Pack(); err != nil {
 			return err
 		}
-		packedFilePath := filepath.Join(path, d.Conf.PackedFile)
-		os.Rename(filepath.Join(d.Dir, d.Conf.PackedFile), packedFilePath)
-		p.MainPackage.Conf.DependencyZipFiles = append(p.MainPackage.Conf.DependencyZipFiles, d.Conf.PackedFile)
+		oldPath := d.Conf.PackedFile
+		newPath := filepath.Join(p.tmpZipPath(), d.Conf.PackedFile)
+		if err := os.Rename(oldPath, newPath); err != nil {
+			return err
+		}
+		p.MainPackage.Conf.DependencyZipFiles = append(p.MainPackage.Conf.DependencyZipFiles, newPath)
 		os.Chdir(oldWd)
 	}
 	return nil
@@ -592,16 +599,23 @@ func (p *PackageEnv) createTmpDir() error {
 		if err := os.Mkdir(p.tmpDependenciesPath(), os.ModeAppend|os.ModePerm); err != nil {
 			return err
 		}
+		if err := os.Mkdir(p.tmpZipPath(), os.ModeAppend|os.ModePerm); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
 func (p *PackageEnv) tmpPath() string {
-	return filepath.Join(p.MainPackage.Dir, ".scintilla")
+	return filepath.Join(".scintilla")
 }
 
 func (p *PackageEnv) tmpDependenciesPath() string {
 	return filepath.Join(p.tmpPath(), "dependencies")
+}
+
+func (p *PackageEnv) tmpZipPath() string {
+	return filepath.Join(p.tmpPath(), "zip")
 }
 
 // UnpackPackage opens the ZIP archive file at archivePath and writes its contents to destFolder.
