@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
-	"github.com/bellus-team/scintilla"
+	"github.com/dywoq/scintilla"
 	"github.com/spf13/cobra"
 )
 

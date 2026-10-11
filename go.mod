@@ -1,4 +1,4 @@
-module github.com/bellus-team/scintilla
+module github.com/dywoq/scintilla
 
 go 1.27
 

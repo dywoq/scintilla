@@ -3,7 +3,7 @@
 
 package main
 
-import "github.com/bellus-team/scintilla/cmd/scintilla/internal/cmd"
+import "github.com/dywoq/scintilla/cmd/scintilla/internal/cmd"
 
 func main() {
 	cmd.Root().Execute()
