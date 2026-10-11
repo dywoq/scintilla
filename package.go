@@ -169,17 +169,12 @@ func (p *Package) Compile() error {
 	if !p.BuildMode.Valid() {
 		return ErrInvalidPackageBuildMode
 	}
-	objsDirPath := filepath.Join(p.Dir, p.Conf.ObjectsDir)
-	if err := os.Mkdir(objsDirPath, os.ModeAppend|os.ModePerm); os.IsExist(err) {
-		os.RemoveAll(objsDirPath)
-		os.Mkdir(objsDirPath, os.ModeAppend|os.ModePerm)
+	if err := p.createObjsDir(); err != nil {
+		return err
 	}
 	baseArgs := p.baseCompileArgs(true)
 	for _, src := range p.Conf.Sources {
-		finalSrc := filepath.Join(p.Dir, src)
-		objFilename, _ := strings.CutSuffix(src, ".cxx")
-		objFilename += ".obj"
-		objPath := filepath.Join(p.Dir, p.Conf.ObjectsDir, objFilename)
+		finalSrc, objPath := p.convertSrcToObj(src)
 		finalArgs := slices.Concat(baseArgs, []string{
 			"-c",
 			"-o",
@@ -291,17 +286,12 @@ func (p *Package) GenerateCompilationDatabase() error {
 	if !p.BuildMode.Valid() {
 		return ErrInvalidPackageBuildMode
 	}
-	objsDirPath := filepath.Join(p.Dir, p.Conf.ObjectsDir)
-	if err := os.Mkdir(objsDirPath, os.ModeAppend|os.ModePerm); os.IsExist(err) {
-		os.RemoveAll(objsDirPath)
-		os.Mkdir(objsDirPath, os.ModeAppend|os.ModePerm)
+	if err := p.createObjsDir(); err != nil {
+		return err
 	}
 	baseArgs := p.baseCompileArgs(false)
 	for _, src := range p.Conf.Sources {
-		finalSrc := filepath.Join(src)
-		objFilename, _ := strings.CutSuffix(src, ".cxx")
-		objFilename += ".obj"
-		objPath := filepath.Join(p.Conf.ObjectsDir, objFilename)
+		finalSrc, objPath := p.convertSrcToObj(src)
 		finalArgs := slices.Concat([]string{"--", "clang++"}, baseArgs, []string{
 			"-c",
 			"-o",
@@ -337,10 +327,28 @@ func (p *Package) Pack() error {
 	return fmt.Errorf("unknown package type %q", p.Conf.Type)
 }
 
-func (p *Package) packProgram() error {
-	if err := p.Compile(); err != nil {
-		return err
+func (p *Package) convertSrcToObj(src string) (finalSrc string, objPath string) {
+	finalSrc = filepath.Join(p.Dir, src)
+	objFilename, _ := strings.CutSuffix(src, ".cxx")
+	objFilename += ".obj"
+	objPath = filepath.Join(p.Dir, p.Conf.ObjectsDir, objFilename)
+	return
+}
+
+func (p *Package) createObjsDir() error {
+	objsDirPath := filepath.Join(p.Dir, p.Conf.ObjectsDir)
+	if err := os.Mkdir(objsDirPath, os.ModeAppend|os.ModePerm); os.IsExist(err) {
+		if err := os.RemoveAll(objsDirPath); err != nil {
+			return err
+		}
+		if err := os.Mkdir(objsDirPath, os.ModeAppend|os.ModePerm); err != nil {
+			return err
+		}
 	}
+	return nil
+}
+
+func (p *Package) packProgram() error {
 	if err := p.Link(); err != nil {
 		return err
 	}
@@ -366,9 +374,6 @@ func (p *Package) packProgram() error {
 }
 
 func (p *Package) packLibrary() error {
-	if err := p.Compile(); err != nil {
-		return err
-	}
 	if err := p.Archive(); err != nil {
 		return err
 	}
