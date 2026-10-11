@@ -20,6 +20,11 @@ Scintilla is suitable for:
 Since Scintilla automatically disables standard library and enables freestanding mode, these goals
 are possible. Use it when you want to build your own ecosystem without relying on ready solutions.
 
+# Condition
+
+At the moment, the current condition of Scintilla is: **"functional, but bugs may occur and it is not
+stable yet"**. Scintilla is being actively developed.
+
 # Installation
 
 Scintilla provides a CLI tool to manage Scintilla packages. You can install it using the
