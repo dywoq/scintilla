@@ -12,6 +12,14 @@ programming interface is available in Golang only, you can use it in your Golang
 powered by [Ebiten](https://github.com/hajimehoshi/ebiten). However, Scintilla is flexible and there may
 be other uses.
 
+Scintilla is suitable for:
+
+- **creating a standard library/runtime from scratch in guest C++ code.**
+- **adapting an existing implementation of the official C++ standard library to Scintilla.**
+
+Since Scintilla automatically disables standard library and enables freestanding mode, these goals
+are possible. Use it when you want to build your own ecosystem without relying on ready solutions.
+
 # Installation
 
 Scintilla provides a CLI tool to manage Scintilla packages. You can install it using the
