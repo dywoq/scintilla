@@ -23,8 +23,8 @@ go install github.com/dywoq/scintilla/cmd/scintilla@latest
 
 # Documentation
 
-The folder `docs/` gives a comprehensive description of available Scintilla commands and
-features.
+The folder [`docs/`](https://github.com/dywoq/scintilla/tree/main/docs) gives a comprehensive description
+of available Scintilla commands and configuration keys.
 
 # License
 
