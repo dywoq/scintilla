@@ -1,9 +1,19 @@
 # CLI
 
-This document describes available commands and their flags in Scintilla. As stated in the
-[README.md](https://github.com/dywoq/scintilla/blob/main/README.md).
+This document describes available commands and their flags in Scintilla.
 
 # Commands
+
+## Persistent flags
+
+This heading describes the persistent flags, available in every command.
+
+### `verbose`
+
+**Type**: `bool`
+
+**Description**: This flag allows you to make Scintilla print informative messages to the
+standard out stream.
 
 ## `build`
 
