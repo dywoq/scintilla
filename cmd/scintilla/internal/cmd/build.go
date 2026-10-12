@@ -5,6 +5,8 @@ package cmd
 
 import (
 	"fmt"
+	"log"
+	"os"
 
 	"github.com/dywoq/scintilla"
 	"github.com/spf13/cobra"
@@ -16,14 +18,25 @@ func Build() *cobra.Command {
 		Short: "Compile your Scintilla package",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			defaultLogger := log.New(os.Stdout, "scintilla: ", 0)
+			verbose, _ := cmd.Flags().GetBool("verbose")
+
 			p := scintilla.NewPackage(args[0])
+			if verbose {
+				p.Logger = defaultLogger
+			}
+
 			if err := p.ParseConfig(); err != nil {
 				return fmt.Errorf("parsing config failed: %v", err)
 			}
+
 			buildModeFlag, _ := cmd.Flags().GetString("build_mode")
 			p.BuildMode = scintilla.PackageBuildMode(buildModeFlag)
 			env := scintilla.NewPackageEnv(p.Dir)
 			env.MainPackage = p
+			if verbose {
+				env.Logger = defaultLogger
+			}
 			if err := env.BuildDependencies(); err != nil {
 				return fmt.Errorf("building dependencies failed: %v", err)
 			}

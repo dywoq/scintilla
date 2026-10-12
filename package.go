@@ -9,11 +9,14 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
+
+	scintilla_log "github.com/dywoq/scintilla/internal/log"
 
 	"github.com/BurntSushi/toml"
 )
@@ -46,11 +49,13 @@ type Package struct {
 	Conf         *PackageConf `toml:"config"`
 	ConfMetadata toml.MetaData
 	BuildMode    PackageBuildMode
+	Logger       *log.Logger
 }
 
 type PackageEnv struct {
 	MainPackage        *Package
 	DependencyPackages []*Package
+	Logger             *log.Logger
 }
 
 // PackageErrorSrc identifies the origin of an error.
@@ -165,6 +170,7 @@ func (p *Package) ParseConfig() error {
 	}
 	p.ConfMetadata = metadata
 	p.Conf = conf
+	scintilla_log.Info(p.Logger, "Successfully parsed the config file (\"scintilla.toml\")")
 	return nil
 }
 
@@ -196,6 +202,7 @@ func (p *Package) CreateGitignore() error {
 	}
 	defer f.Close()
 	f.WriteString(b.String())
+	scintilla_log.Info(p.Logger, "%q: Successfully created .gitignore file", p.Dir)
 	return nil
 }
 
@@ -222,6 +229,7 @@ func (p *Package) Compile() error {
 			Err: fmt.Errorf("failed to create objects directory: %v", err),
 		}
 	}
+	scintilla_log.Warn(p.Logger, "%q: Compiling object files", p.Dir)
 	baseArgs := p.baseCompileArgs(true)
 	for _, src := range p.Conf.Sources {
 		finalSrc, objPath := p.convertSrcToObj(src, true)
@@ -235,6 +243,7 @@ func (p *Package) Compile() error {
 			"clang++",
 			finalArgs...,
 		)
+		scintilla_log.Info(p.Logger, "%q: %s %s", p.Dir, cmd.Path, strings.Join(finalArgs, " "))
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			fmt.Print(string(output))
@@ -263,7 +272,7 @@ func (p *Package) Link() error {
 			Src: PackageErrorSrcLink,
 		}
 	}
-
+	scintilla_log.Warn(p.Logger, "%q: Linking the program", p.Dir)
 	objects := p.objectFiles()
 	if objects == nil {
 		return &PackageError{
@@ -287,6 +296,7 @@ func (p *Package) Link() error {
 		"clang++",
 		args...,
 	)
+	scintilla_log.Info(p.Logger, "%q: %s %s", p.Dir, cmd.Path, strings.Join(args, " "))
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		fmt.Print(string(output))
@@ -314,6 +324,7 @@ func (p *Package) Archive() error {
 			Src: PackageErrorSrcArchive,
 		}
 	}
+	scintilla_log.Warn(p.Logger, "%q: Archiving the library", p.Dir)
 	objects := p.objectFiles()
 	if objects == nil {
 		return &PackageError{
@@ -333,6 +344,7 @@ func (p *Package) Archive() error {
 		"llvm-ar",
 		args...,
 	)
+	scintilla_log.Info(p.Logger, "%q: %s %s", p.Dir, cmd.Path, strings.Join(args, " "))
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		fmt.Print(string(output))
@@ -366,9 +378,11 @@ func (p *Package) GenerateCompilationDatabase() error {
 			Err: fmt.Errorf("failed to create objects directory: %v", err),
 		}
 	}
+	scintilla_log.Warn(p.Logger, "%q: Generating the compilation database", p.Dir)
 	baseArgs := p.baseCompileArgs(false)
 	for _, src := range p.Conf.Sources {
 		finalSrc, objPath := p.convertSrcToObj(src, false)
+		fmt.Printf("objPath: %v\n", objPath)
 		finalArgs := slices.Concat([]string{"--", "clang++"}, baseArgs, []string{
 			"-c",
 			"-o",
@@ -380,6 +394,7 @@ func (p *Package) GenerateCompilationDatabase() error {
 			finalArgs...,
 		)
 		cmd.Dir = p.Dir
+		scintilla_log.Info(p.Logger, "%q: %s %s", p.Dir, cmd.Path, strings.Join(finalArgs, " "))
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			fmt.Print(string(output))
@@ -400,8 +415,10 @@ func (p *Package) GenerateCompilationDatabase() error {
 func (p *Package) Pack() error {
 	switch p.Conf.Type {
 	case PackageTypeProgram:
+		scintilla_log.Warn(p.Logger, "%q: Packing the program", p.Dir)
 		return p.packProgram()
 	case PackageTypeLib:
+		scintilla_log.Warn(p.Logger, "%q: Packing the library", p.Dir)
 		return p.packLibrary()
 	}
 	return &PackageError{
@@ -411,13 +428,14 @@ func (p *Package) Pack() error {
 }
 
 func (p *Package) convertSrcToObj(src string, addDir bool) (finalSrc string, objPath string) {
-	finalSrc = src
+	dir := ""
 	if addDir {
-		finalSrc = filepath.Join(p.Dir, src)
+		dir = p.Dir
 	}
+	finalSrc = filepath.Join(dir, src)
 	objFilename, _ := strings.CutSuffix(src, ".cxx")
 	objFilename += ".obj"
-	objPath = filepath.Join(p.Dir, p.Conf.ObjectsDir, objFilename)
+	objPath = filepath.Join(dir, p.Conf.ObjectsDir, objFilename)
 	return
 }
 
@@ -447,6 +465,7 @@ func (p *Package) packProgram() error {
 	if err := p.writeBaseFilesToZip(writer); err != nil {
 		return err
 	}
+	scintilla_log.Info(p.Logger, "%q: The archive file is %q", p.Conf.PackedFile)
 	return writer.Close()
 }
 
@@ -468,7 +487,9 @@ func (p *Package) packLibrary() error {
 			writer.Close()
 			return err
 		}
+		scintilla_log.Info(p.Logger, "%q: Packed the include directory %q", p.Dir, inc)
 	}
+	scintilla_log.Info(p.Logger, "%q: The archive file is %q", p.Dir, p.Conf.PackedFile)
 	return writer.Close()
 }
 
@@ -490,12 +511,14 @@ func (p *Package) writeBaseFilesToZip(w *zip.Writer) error {
 			Src: PackageErrorSrcPack,
 		}
 	}
+	scintilla_log.Info(p.Logger, "%q: Packed the target file %q", p.Dir, p.Conf.TargetFile)
 	if err := p.packFile(w, filepath.Join(p.Dir, "scintilla.toml"), "scintilla.toml"); err != nil {
 		return &PackageError{
 			Err: fmt.Errorf("packing scintilla.toml file failed: %v", err),
 			Src: PackageErrorSrcPack,
 		}
 	}
+	scintilla_log.Info(p.Logger, "%q: Packed the configuration file %q", p.Dir, "scintilla.toml")
 	return nil
 }
 
@@ -579,6 +602,10 @@ func (p *Package) packDirectory(writer *zip.Writer, sourceDir string) error {
 
 func (p *Package) objectFiles() []string {
 	objects, _ := filepath.Glob(filepath.Join(p.Dir, p.Conf.ObjectsDir, "*.obj"))
+	scintilla_log.Info(p.Logger, "%q: Object files:")
+	for _, obj := range objects {
+		scintilla_log.Warn(p.Logger, "%q: * %v", p.Dir, obj)
+	}
 	return objects
 }
 
@@ -629,15 +656,20 @@ func (p *PackageEnv) UnpackDependencies() error {
 		if err != nil {
 			return err
 		}
+		d.Logger = p.MainPackage.Logger
+		scintilla_log.Info(p.Logger, "%q: Unpacked package", d.Dir)
 		if err := d.ParseConfig(); err != nil {
 			return err
 		}
 		if d.Conf.Type == PackageTypeLib {
 			for _, inc := range d.Conf.IncludeDirs {
-				str, _ := filepath.Rel(p.MainPackage.Dir, filepath.Join(dest, inc))
+				finalInc := filepath.Join(dest, inc)
+				str, _ := filepath.Rel(p.MainPackage.Dir, finalInc)
 				p.MainPackage.Conf.IncludeDirs = append(p.MainPackage.Conf.IncludeDirs, str)
+				scintilla_log.Info(p.Logger, "%q: Appended %q to the include directories list", p.MainPackage.Dir, finalInc)
 			}
 			p.MainPackage.Conf.LibraryDirs = append(p.MainPackage.Conf.LibraryDirs, dest)
+			scintilla_log.Info(p.Logger, "%q: Appended %q to the library directories list", dest)
 			// Check whether d.Conf.TargetFile is a valid library file, which means
 			// it has the "lib" prefix and ".a" suffix. Later, we cut these off to make it a
 			// linker flag in the main package configuration.
@@ -649,9 +681,12 @@ func (p *PackageEnv) UnpackDependencies() error {
 			}
 			libraryName, _ := strings.CutPrefix(d.Conf.TargetFile, "lib")
 			libraryName, _ = strings.CutSuffix(libraryName, ".a")
-			p.MainPackage.Conf.LinkerFlags = append(p.MainPackage.Conf.LinkerFlags, fmt.Sprintf("-l%s", libraryName))
+			linkerFlag := fmt.Sprintf("-l%s", libraryName)
+			p.MainPackage.Conf.LinkerFlags = append(p.MainPackage.Conf.LinkerFlags, linkerFlag)
+			scintilla_log.Info(p.Logger, "%q: Appended %q to the linker flags", p.MainPackage.Dir, linkerFlag)
 		}
 		p.DependencyPackages = append(p.DependencyPackages, d)
+		scintilla_log.Info(p.Logger, "%q: Appended %q to the dependency packages list", p.MainPackage.Dir, d.Dir)
 	}
 	return nil
 }
@@ -682,6 +717,7 @@ func (p *PackageEnv) BuildDependencies() error {
 		}
 
 		d := NewPackage(path)
+		d.Logger = p.MainPackage.Logger
 		if err := d.ParseConfig(); err != nil {
 			return err
 		}
@@ -706,6 +742,7 @@ func (p *PackageEnv) BuildDependencies() error {
 				Src: PackageErrorSrcBuildDependencies,
 			}
 		}
+		scintilla_log.Info(p.Logger, "%q: Moved %q to %q", p.MainPackage.Dir, oldPath, newPath)
 		p.MainPackage.Conf.DependencyZipFiles = append(p.MainPackage.Conf.DependencyZipFiles, newPath)
 		if err := os.Chdir(oldWd); err != nil {
 			return &PackageError{
@@ -722,25 +759,19 @@ func (p *PackageEnv) createTmpDir(baseDir string) error {
 	dependenciesPath := filepath.Join(tmpPath, "dependencies")
 	zipPath := filepath.Join(tmpPath, "zip")
 	mode := os.ModeAppend | os.ModePerm
-	if _, err := os.Lstat(tmpPath); os.IsNotExist(err) {
-		if err := os.Mkdir(tmpPath, mode); err != nil {
+	dirs := []string{
+		tmpPath,
+		dependenciesPath,
+		zipPath,
+	}
+	for _, dir := range dirs {
+		if err := os.Mkdir(dir, mode); !os.IsExist(err) {
 			return &PackageError{
-				Err: fmt.Errorf("creating %q failed: %v", tmpPath, err),
+				Err: fmt.Errorf("creating %q failed", dir),
 				Src: PackageErrorSrcUnpack,
 			}
 		}
-		if err := os.Mkdir(dependenciesPath, mode); err != nil {
-			return &PackageError{
-				Err: fmt.Errorf("creating %q failed: %v", dependenciesPath, err),
-				Src: PackageErrorSrcUnpack,
-			}
-		}
-		if err := os.Mkdir(zipPath, mode); err != nil {
-			return &PackageError{
-				Err: fmt.Errorf("creating %q failed: %v", zipPath, err),
-				Src: PackageErrorSrcUnpack,
-			}
-		}
+		scintilla_log.Info(p.Logger, "%q: Created %q directory", p.MainPackage.Dir, dir)
 	}
 	return nil
 }
