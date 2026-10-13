@@ -765,9 +765,11 @@ func (p *PackageEnv) createTmpDir(baseDir string) error {
 		zipPath,
 	}
 	for _, dir := range dirs {
-		if err := os.Mkdir(dir, mode); !os.IsExist(err) {
+		// The function is supposed to create directories if they do not exist,
+		// or skip them if they already do.
+		if err := os.Mkdir(dir, mode); err != nil && !os.IsExist(err) {
 			return &PackageError{
-				Err: fmt.Errorf("creating %q failed", dir),
+				Err: fmt.Errorf("creating %q failed: %v", dir, err),
 				Src: PackageErrorSrcUnpack,
 			}
 		}
@@ -777,7 +779,7 @@ func (p *PackageEnv) createTmpDir(baseDir string) error {
 }
 
 func (p *PackageEnv) tmpPath() string {
-	return filepath.Join(".scintilla")
+	return ".scintilla" + string(os.PathSeparator)
 }
 
 func (p *PackageEnv) tmpDependenciesPath() string {
