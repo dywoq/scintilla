@@ -19,7 +19,7 @@ func Root() *cobra.Command {
 		Short: "Scripting infrastructure, based on WebAssembly and C++",
 		Long:  long.String(),
 	}
-	root.PersistentFlags().Bool("verbose", true, "whether to print informative messages or not")
+	root.PersistentFlags().Bool("verbose", false, "whether to print informative messages or not")
 	root.AddCommand(Build(), Pack(), Compiledb(), Init())
 	return root
 }
