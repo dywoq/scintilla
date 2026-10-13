@@ -602,7 +602,7 @@ func (p *Package) packDirectory(writer *zip.Writer, sourceDir string) error {
 
 func (p *Package) objectFiles() []string {
 	objects, _ := filepath.Glob(filepath.Join(p.Dir, p.Conf.ObjectsDir, "*.obj"))
-	scintilla_log.Info(p.Logger, "%q: Object files:")
+	scintilla_log.Info(p.Logger, "%q: Object files:", p.Dir)
 	for _, obj := range objects {
 		scintilla_log.Warn(p.Logger, "%q: * %v", p.Dir, obj)
 	}
